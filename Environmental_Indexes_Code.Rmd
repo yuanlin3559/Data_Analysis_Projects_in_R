@@ -1,0 +1,1152 @@
+---
+title: "Final"
+author: "Q2"
+date: "3/20/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls())
+knitr::opts_chunk$set(echo = TRUE)
+suppressPackageStartupMessages(library(data.table))
+suppressPackageStartupMessages(library(ggplot2))
+#install.packages("mltools")
+library("mltools")
+library(dplyr)
+#Feature Selection - Random Forest - Binary classification
+set.seed(10)#ensure that it is repeatable
+#install.packages("mlbench")
+#install.packages("caret")
+library(mlbench)
+library(caret)
+#install.packages("randomForest",repos="http://R-Forge.R-project.org")
+library(randomForest)
+#install.packages("ranger")
+library(ranger)
+library(leaps)
+
+```
+```{r}
+setwd("C:\\Users\\Yibei\\Desktop\\Math_189")
+water.2020 <- fread("Corporations\\Corporations Responses\\Water Security\\2020_Full_Water_Security_Dataset.csv")
+water.2019 <- fread("Corporations\\Corporations Responses\\Water Security\\2019_Full_Water_Security_Dataset.csv")
+water.2018 <- fread("Corporations\\Corporations Responses\\Water Security\\2018_Full_Water_Security_Dataset.csv")
+
+climate.2020 <- fread("Corporations\\Corporations Responses\\Climate Change\\2020_Full_Climate_Change_Dataset.csv")
+climate.2019 <- fread("Corporations\\Corporations Responses\\Climate Change\\2019_Full_Climate_Change_Dataset.csv")
+climate.2018 <- fread("Corporations\\Corporations Responses\\Climate Change\\2018_Full_Climate_Change_Dataset.csv")
+
+cities.2018 <- fread("C:\\Users\\Yibei\\Desktop\\Math_189\\Cities\\Cities Responses\\2018_Full_Cities_Dataset.csv")
+cities.2019 <- fread("C:\\Users\\Yibei\\Desktop\\Math_189\\Cities\\Cities Responses\\2019_Full_Cities_Dataset.csv")
+cities.2020 <- fread("C:\\Users\\Yibei\\Desktop\\Math_189\\Cities\\Cities Responses\\2020_Full_Cities_Dataset.csv")
+```
+
+```{r}
+transform <- function(dt, var) {
+dt_climate <- data.table()
+dt_climate$account_number <- unique(dt$account_number)
+# colnames(dt_climate) <- unique(dt$question_number)
+dt$var <- paste(dt$question_number, dt$column_number, dt$row_number, sep="/")
+for (i in var){
+  print(i)
+  new_dt <- dt[dt$var == i][,c("account_number", "response_value")]
+  colnames(new_dt)[2] <- i
+  dt_climate<- merge(new_dt, dt_climate, by="account_number",all=TRUE)
+}
+return(dt_climate)
+}
+  
+#格式是 question_number/column_number/row_number
+#6.1/1/1 gross emission, 6.3/1/1 location based; 6.3/2/1 market based
+var <- c("C2.4/NA/0", "C8.1/NA/0", "C12.1/NA/0", "C12.3/NA/0", "C4.1/NA/0", "C4.5/NA/0", "C6.1/1/1","C6.3/1/1","C6.3/2/1", "C4.1a/3/1")
+climate_2018_dt <- transform(climate.2018, var)
+  
+var_2019 <- c("C2.4/NA/0", "C8.1/NA/0", "C12.1/NA/0", "C12.3/NA/0", "C4.1/NA/0", "C4.5/NA/0", "C6.1/1/1","C6.3/1/1","C6.3/2/1", "C4.1a/3/1")
+climate_2019_dt <- transform(climate.2019, var_2019)
+
+var_2020 <- c("C2.4/NA/0", "C8.1/NA/0", "C12.1/NA/0", "C12.3/NA/0", "C4.1/NA/0", "C4.5/NA/0", "C6.1/1/1","C6.3/1/1","C6.3/2/1", "C4.1a/7/1")
+climate_2020_dt <- transform(climate.2020, var_2020)
+
+
+col <- c("account_number", "emis_percentage", "scope_2_market","scope_2_loc", "scope_1", "low_GHG_service", "emission_target", "public_policy","engagement", "energy_percent", "financial_opportunity")
+col_19 <- c("account_number", "emis_percentage_19", "scope_2_market_19","scope_2_loc_19", "scope_1_19", "low_GHG_service_19", "emission_target_19", "public_policy_19","engagement_19", "energy_percent_19", "financial_opportunity_19")
+col_20 <- c("account_number", "emis_percentage_20", "scope_2_market_20","scope_2_loc_20", "scope_1_20", "low_GHG_service_20", "emission_target_20", "public_policy_20","engagement_20", "energy_percent_20", "financial_opportunity_20")
+colnames(climate_2018_dt)<- col
+colnames(climate_2019_dt)<- col_19
+colnames(climate_2020_dt)<- col_20
+
+climate_2018_19_dt<- merge(climate_2018_dt,climate_2019_dt, by="account_number")
+climate_dt<- merge(climate_2018_19_dt,climate_2020_dt, by="account_number")
+
+climate_dt$emis_percentage <- as.numeric(climate_dt$emis_percentage)
+
+climate_dt$scope_2_market <-as.numeric(climate_dt$scope_2_market)
+climate_dt$scope_2_loc <- as.numeric(climate_dt$scope_2_loc)
+
+climate_dt$scope_1 <- as.numeric(climate_dt$scope_1)
+
+# climate_dt$low_GHG_service <- as.factor(climate_dt$low_GHG_service)
+climate_dt$low_GHG_service[climate_dt$low_GHG_service==""] <- NA
+climate_dt$low_GHG_service[climate_dt$low_GHG_service=="No"] <- 0
+climate_dt$low_GHG_service[climate_dt$low_GHG_service=="Yes"] <- 1
+climate_dt$low_GHG_service <- as.numeric(climate_dt$low_GHG_service)
+
+climate_dt$emission_target[climate_dt$emission_target == "Intensity target"] <- 1
+climate_dt$emission_target[climate_dt$emission_target == "Absolute target"] <- 2
+climate_dt$emission_target[climate_dt$emission_target == "No target"] <- 0
+climate_dt$emission_target[climate_dt$emission_target == "Both absolute and intensity targets"] <- 3
+climate_dt$emission_target <- as.numeric(climate_dt$emission_target)
+
+climate_dt$public_policy[climate_dt$public_policy == ""] <- NA
+climate_dt$public_policy[climate_dt$public_policy == "No"] <- 0
+climate_dt$public_policy[!climate_dt$public_policy == 0] <- 1
+climate_dt$public_policy <- as.numeric(climate_dt$public_policy)
+
+climate_dt$engagement[climate_dt$engagement == ""] <- NA
+climate_dt$engagement[climate_dt$engagement == "No, we do not engage"] <- 0
+climate_dt$engagement[climate_dt$engagement == "Yes, our customers"] <- 1
+climate_dt$engagement[climate_dt$engagement == "Yes, our suppliers"] <- 1
+climate_dt$engagement[climate_dt$engagement == "Yes, other partners in the value chain"] <- 1
+climate_dt$engagement[climate_dt$engagement == "Yes, our customers; Yes, our suppliers"] <- 2
+climate_dt$engagement[climate_dt$engagement == "Yes, other partners in the value chain; Yes, our suppliers"] <- 2
+climate_dt$engagement[climate_dt$engagement == "Yes, other partners in the value chain; Yes, our customers"] <- 2
+climate_dt$engagement[climate_dt$engagement == "Yes, other partners in the value chain; Yes, our customers; Yes, our suppliers"] <- 3
+climate_dt$engagement <- as.numeric(climate_dt$engagement)
+
+climate_dt$energy_percent[climate_dt$energy_percent == "0%"] <- 0
+climate_dt$energy_percent[climate_dt$energy_percent == "Don't know"] <- NA
+climate_dt$energy_percent[climate_dt$energy_percent == ""] <- NA
+climate_dt$energy_percent[climate_dt$energy_percent == "More than 0% but less than or equal to 5%"] <- 1
+climate_dt$energy_percent[climate_dt$energy_percent == "More than 5% but less than or equal to 10%"] <- 2
+climate_dt$energy_percent[climate_dt$energy_percent == "More than 10% but less than or equal to 15%"] <- 3
+climate_dt$energy_percent[climate_dt$energy_percent == "More than 15% but less than or equal to 20%"] <- 4
+climate_dt$energy_percent[climate_dt$energy_percent == "More than 20% but less than or equal to 25%"] <- 5
+climate_dt$energy_percent[climate_dt$energy_percent == "More than 25% but less than or equal to 30%"] <- 6
+climate_dt$energy_percent[climate_dt$energy_percent == "More than 30% but less than or equal to 35%"] <- 7
+climate_dt$energy_percent[climate_dt$energy_percent == "More than 35% but less than or equal to 40%"] <- 8
+climate_dt$energy_percent[climate_dt$energy_percent == "More than 40% but less than or equal to 45%"] <- 9
+climate_dt$energy_percent[climate_dt$energy_percent == "More than 45% but less than or equal to 50%"] <- 10
+climate_dt$energy_percent[climate_dt$energy_percent == "More than 50% but less than or equal to 55%"] <- 11
+climate_dt$energy_percent[climate_dt$energy_percent == "More than 55% but less than or equal to 60%"] <- 12
+climate_dt$energy_percent[climate_dt$energy_percent == "More than 60% but less than or equal to 65%"] <- 13
+climate_dt$energy_percent[climate_dt$energy_percent == "More than 65% but less than or equal to 70%"] <- 14
+climate_dt$energy_percent[climate_dt$energy_percent == "More than 70% but less than or equal to 75%"] <- 15
+climate_dt$energy_percent[climate_dt$energy_percent == "More than 75% but less than or equal to 80%"] <- 16
+climate_dt$energy_percent[climate_dt$energy_percent == "More than 80% but less than or equal to 85%"] <- 17
+climate_dt$energy_percent[climate_dt$energy_percent == "More than 85% but less than or equal to 90%"] <- 18
+climate_dt$energy_percent[climate_dt$energy_percent == "More than 90% but less than or equal to 95%"] <- 19
+climate_dt$energy_percent[climate_dt$energy_percent == "More than 95% but less than or equal to 100%"] <- 20
+climate_dt$energy_percent <- as.numeric(climate_dt$energy_percent)
+
+climate_dt$financial_opportunity[climate_dt$financial_opportunity == ""] <- NA
+climate_dt$financial_opportunity[climate_dt$financial_opportunity == "No"] <- 0
+climate_dt$financial_opportunity[climate_dt$financial_opportunity == "Yes, we have identified opportunities but are unable to realize them"] <- 1
+climate_dt$financial_opportunity[climate_dt$financial_opportunity == "Yes"] <- 2
+climate_dt$financial_opportunity <- as.numeric(climate_dt$financial_opportunity)
+```
+
+```{r}
+#clean up for year 2019
+
+climate_dt$emis_percentage_19 <- as.numeric(climate_dt$emis_percentage_19)
+
+climate_dt$scope_2_market_19 <-as.numeric(climate_dt$scope_2_market_19)
+climate_dt$scope_2_loc_19 <- as.numeric(climate_dt$scope_2_loc_19)
+
+climate_dt$scope_1_19 <- as.numeric(climate_dt$scope_1_19)
+
+# climate_dt$low_GHG_service <- as.factor(climate_dt$low_GHG_service)
+climate_dt$low_GHG_service_19[climate_dt$low_GHG_service_19==""] <- NA
+climate_dt$low_GHG_service_19[climate_dt$low_GHG_service_19=="No"] <- 0
+climate_dt$low_GHG_service_19[climate_dt$low_GHG_service_19=="Yes"] <- 1
+climate_dt$low_GHG_service_19 <- as.numeric(climate_dt$low_GHG_service_19)
+
+climate_dt$emission_target_19[climate_dt$emission_target_19 == "Intensity target"] <- 1
+climate_dt$emission_target_19[climate_dt$emission_target_19 == "Absolute target"] <- 2
+climate_dt$emission_target_19[climate_dt$emission_target_19 == "No target"] <- 0
+climate_dt$emission_target_19[climate_dt$emission_target_19 == "Both absolute and intensity targets"] <- 3
+climate_dt$emission_target_19 <- as.numeric(climate_dt$emission_target_19)
+
+climate_dt$public_policy_19[climate_dt$public_policy_19 == ""] <- NA
+climate_dt$public_policy_19[climate_dt$public_policy_19 == "No"] <- 0
+climate_dt$public_policy_19[!climate_dt$public_policy_19 == 0] <- 1
+climate_dt$public_policy_19 <- as.numeric(climate_dt$public_policy_19)
+
+climate_dt$engagement_19[climate_dt$engagement_19 == ""] <- NA
+climate_dt$engagement_19[climate_dt$engagement_19 == "No, we do not engage"] <- 0
+climate_dt$engagement_19[climate_dt$engagement_19 == "Yes, our customers"] <- 1
+climate_dt$engagement_19[climate_dt$engagement_19 == "Yes, our suppliers"] <- 1
+climate_dt$engagement_19[climate_dt$engagement_19 == "Yes, other partners in the value chain"] <- 1
+climate_dt$engagement_19[climate_dt$engagement_19 == "Yes, our customers; Yes, our suppliers"] <- 2
+climate_dt$engagement_19[climate_dt$engagement_19 == "Yes, other partners in the value chain; Yes, our suppliers"] <- 2
+climate_dt$engagement_19[climate_dt$engagement_19 == "Yes, other partners in the value chain; Yes, our customers"] <- 2
+climate_dt$engagement_19[climate_dt$engagement_19 == "Yes, other partners in the value chain; Yes, our customers; Yes, our suppliers"] <- 3
+climate_dt$engagement_19 <- as.numeric(climate_dt$engagement_19)
+
+climate_dt$energy_percent_19[climate_dt$energy_percent_19 == "0%"] <- 0
+climate_dt$energy_percent_19[climate_dt$energy_percent_19 == "Don't know"] <- NA
+climate_dt$energy_percent_19[climate_dt$energy_percent_19 == ""] <- NA
+climate_dt$energy_percent_19[climate_dt$energy_percent_19 == "More than 0% but less than or equal to 5%"] <- 1
+climate_dt$energy_percent_19[climate_dt$energy_percent_19 == "More than 5% but less than or equal to 10%"] <- 2
+climate_dt$energy_percent_19[climate_dt$energy_percent_19 == "More than 10% but less than or equal to 15%"] <- 3
+climate_dt$energy_percent_19[climate_dt$energy_percent_19 == "More than 15% but less than or equal to 20%"] <- 4
+climate_dt$energy_percent_19[climate_dt$energy_percent_19 == "More than 20% but less than or equal to 25%"] <- 5
+climate_dt$energy_percent_19[climate_dt$energy_percent_19 == "More than 25% but less than or equal to 30%"] <- 6
+climate_dt$energy_percent_19[climate_dt$energy_percent_19 == "More than 30% but less than or equal to 35%"] <- 7
+climate_dt$energy_percent_19[climate_dt$energy_percent_19 == "More than 35% but less than or equal to 40%"] <- 8
+climate_dt$energy_percent_19[climate_dt$energy_percent_19 == "More than 40% but less than or equal to 45%"] <- 9
+climate_dt$energy_percent_19[climate_dt$energy_percent_19 == "More than 45% but less than or equal to 50%"] <- 10
+climate_dt$energy_percent_19[climate_dt$energy_percent_19 == "More than 50% but less than or equal to 55%"] <- 11
+climate_dt$energy_percent_19[climate_dt$energy_percent_19 == "More than 55% but less than or equal to 60%"] <- 12
+climate_dt$energy_percent_19[climate_dt$energy_percent_19 == "More than 60% but less than or equal to 65%"] <- 13
+climate_dt$energy_percent_19[climate_dt$energy_percent_19 == "More than 65% but less than or equal to 70%"] <- 14
+climate_dt$energy_percent_19[climate_dt$energy_percent_19 == "More than 70% but less than or equal to 75%"] <- 15
+climate_dt$energy_percent_19[climate_dt$energy_percent_19 == "More than 75% but less than or equal to 80%"] <- 16
+climate_dt$energy_percent_19[climate_dt$energy_percent_19 == "More than 80% but less than or equal to 85%"] <- 17
+climate_dt$energy_percent_19[climate_dt$energy_percent_19 == "More than 85% but less than or equal to 90%"] <- 18
+climate_dt$energy_percent_19[climate_dt$energy_percent_19 == "More than 90% but less than or equal to 95%"] <- 19
+climate_dt$energy_percent_19[climate_dt$energy_percent_19 == "More than 95% but less than or equal to 100%"] <- 20
+climate_dt$energy_percent_19 <- as.numeric(climate_dt$energy_percent_19)
+
+climate_dt$financial_opportunity_19[climate_dt$financial_opportunity_19 == ""] <- NA
+climate_dt$financial_opportunity_19[climate_dt$financial_opportunity_19 == "No"] <- 0
+climate_dt$financial_opportunity_19[climate_dt$financial_opportunity_19 == "Yes, we have identified opportunities but are unable to realize them"] <- 1
+climate_dt$financial_opportunity_19[climate_dt$financial_opportunity_19 == "Yes"] <- 2
+climate_dt$financial_opportunity_19 <- as.numeric(climate_dt$financial_opportunity_19)
+
+
+```
+
+```{r}
+climate_dt$emis_percentage_20 <- as.numeric(climate_dt$emis_percentage_20)
+
+climate_dt$scope_2_market_20 <-as.numeric(climate_dt$scope_2_market_20)
+climate_dt$scope_2_loc_20 <- as.numeric(climate_dt$scope_2_loc_20)
+
+climate_dt$scope_1_20 <- as.numeric(climate_dt$scope_1_20)
+
+# climate_dt$low_GHG_service <- as.factor(climate_dt$low_GHG_service)
+climate_dt$low_GHG_service_20[climate_dt$low_GHG_service_20==""] <- NA
+climate_dt$low_GHG_service_20[climate_dt$low_GHG_service_20=="No"] <- 0
+climate_dt$low_GHG_service_20[climate_dt$low_GHG_service_20=="Yes"] <- 1
+climate_dt$low_GHG_service_20 <- as.numeric(climate_dt$low_GHG_service_20)
+
+climate_dt$emission_target_20[climate_dt$emission_target_20 == "Intensity target"] <- 1
+climate_dt$emission_target_20[climate_dt$emission_target_20 == "Absolute target"] <- 2
+climate_dt$emission_target_20[climate_dt$emission_target_20 == "No target"] <- 0
+climate_dt$emission_target_20[climate_dt$emission_target_20 == "Both absolute and intensity targets"] <- 3
+climate_dt$emission_target_20 <- as.numeric(climate_dt$emission_target_20)
+
+climate_dt$public_policy_20[climate_dt$public_policy_20 == ""] <- NA
+climate_dt$public_policy_20[climate_dt$public_policy_20 == "No"] <- 0
+climate_dt$public_policy_20[!climate_dt$public_policy_20 == 0] <- 1
+climate_dt$public_policy_20 <- as.numeric(climate_dt$public_policy_20)
+
+climate_dt$engagement_20[climate_dt$engagement_20 == ""] <- NA
+climate_dt$engagement_20[climate_dt$engagement_20 == "No, we do not engage"] <- 0
+climate_dt$engagement_20[climate_dt$engagement_20 == "Yes, our customers"] <- 1
+climate_dt$engagement_20[climate_dt$engagement_20 == "Yes, our suppliers"] <- 1
+climate_dt$engagement_20[climate_dt$engagement_20 == "Yes, other partners in the value chain"] <- 1
+climate_dt$engagement_20[climate_dt$engagement_20 == "Yes, our customers; Yes, our suppliers"] <- 2
+climate_dt$engagement_20[climate_dt$engagement_20 == "Yes, other partners in the value chain; Yes, our suppliers"] <- 2
+climate_dt$engagement_20[climate_dt$engagement_20 == "Yes, other partners in the value chain; Yes, our customers"] <- 2
+climate_dt$engagement_20[climate_dt$engagement_20 == "Yes, other partners in the value chain; Yes, our customers; Yes, our suppliers"] <- 3
+climate_dt$engagement_20 <- as.numeric(climate_dt$engagement_20)
+
+climate_dt$energy_percent_20[climate_dt$energy_percent_20 == "0%"] <- 0
+climate_dt$energy_percent_20[climate_dt$energy_percent_20 == "Don't know"] <- NA
+climate_dt$energy_percent_20[climate_dt$energy_percent_20 == ""] <- NA
+climate_dt$energy_percent_20[climate_dt$energy_percent_20 == "More than 0% but less than or equal to 5%"] <- 1
+climate_dt$energy_percent_20[climate_dt$energy_percent_20 == "More than 5% but less than or equal to 10%"] <- 2
+climate_dt$energy_percent_20[climate_dt$energy_percent_20 == "More than 10% but less than or equal to 15%"] <- 3
+climate_dt$energy_percent_20[climate_dt$energy_percent_20 == "More than 15% but less than or equal to 20%"] <- 4
+climate_dt$energy_percent_20[climate_dt$energy_percent_20 == "More than 20% but less than or equal to 25%"] <- 5
+climate_dt$energy_percent_20[climate_dt$energy_percent_20 == "More than 25% but less than or equal to 30%"] <- 6
+climate_dt$energy_percent_20[climate_dt$energy_percent_20 == "More than 30% but less than or equal to 35%"] <- 7
+climate_dt$energy_percent_20[climate_dt$energy_percent_20 == "More than 35% but less than or equal to 40%"] <- 8
+climate_dt$energy_percent_20[climate_dt$energy_percent_20 == "More than 40% but less than or equal to 45%"] <- 9
+climate_dt$energy_percent_20[climate_dt$energy_percent_20 == "More than 45% but less than or equal to 50%"] <- 10
+climate_dt$energy_percent_20[climate_dt$energy_percent_20 == "More than 50% but less than or equal to 55%"] <- 11
+climate_dt$energy_percent_20[climate_dt$energy_percent_20 == "More than 55% but less than or equal to 60%"] <- 12
+climate_dt$energy_percent_20[climate_dt$energy_percent_20 == "More than 60% but less than or equal to 65%"] <- 13
+climate_dt$energy_percent_20[climate_dt$energy_percent_20 == "More than 65% but less than or equal to 70%"] <- 14
+climate_dt$energy_percent_20[climate_dt$energy_percent_20 == "More than 70% but less than or equal to 75%"] <- 15
+climate_dt$energy_percent_20[climate_dt$energy_percent_20 == "More than 75% but less than or equal to 80%"] <- 16
+climate_dt$energy_percent_20[climate_dt$energy_percent_20 == "More than 80% but less than or equal to 85%"] <- 17
+climate_dt$energy_percent_20[climate_dt$energy_percent_20 == "More than 85% but less than or equal to 90%"] <- 18
+climate_dt$energy_percent_20[climate_dt$energy_percent_20 == "More than 90% but less than or equal to 95%"] <- 19
+climate_dt$energy_percent_20[climate_dt$energy_percent_20 == "More than 95% but less than or equal to 100%"] <- 20
+climate_dt$energy_percent_20 <- as.numeric(climate_dt$energy_percent_20)
+
+climate_dt$financial_opportunity_20[climate_dt$financial_opportunity_20 == ""] <- NA
+climate_dt$financial_opportunity_20[climate_dt$financial_opportunity_20 == "No"] <- 0
+climate_dt$financial_opportunity_20[climate_dt$financial_opportunity_20 == "Yes, we have identified opportunities but are unable to realize them"] <- 1
+climate_dt$financial_opportunity_20[climate_dt$financial_opportunity_20 == "Yes"] <- 2
+climate_dt$financial_opportunity_20 <- as.numeric(climate_dt$financial_opportunity_20)
+```
+
+
+
+subselection model
+```{r}
+
+regfit.best = regsubsets(scope_1~., data = climate_dt)
+regfit.sum = summary(regfit.best)
+regfit.sum
+which.min(regfit.sum$bic)
+
+regfit.best1 = lm(scope_1_20~., data = climate_dt)
+summary(regfit.best1)
+regfit.best2 = lm(scope_2_loc_20~., data = climate_dt)
+summary(regfit.best2)
+regfit.best3 = lm(scope_2_market_20~., data = climate_dt)
+summary(regfit.best3)
+regfit.best4 = lm(emis_percentage_20~., data = climate_dt)
+summary(regfit.best4)
+
+regfit.best5 = lm(low_GHG_service_19~., data = climate_dt)
+summary(regfit.best5)
+regfit.best6 = lm(emission_target_19~., data = climate_dt)
+summary(regfit.best6)
+regfit.best7 = lm(public_policy_19~., data = climate_dt)
+summary(regfit.best7)
+regfit.best8 = lm(engagement_19~., data = climate_dt)
+summary(regfit.best8)
+regfit.best9 = lm(energy_percent_19~., data = climate_dt)
+summary(regfit.best9)
+regfit.best10 = lm(financial_opportunity_19~., data = climate_dt)
+summary(regfit.best10)
+```
+
+#Engagement2018-LowGHGService2019
+```{r}
+chisq.test(climate_dt$engagement,climate_dt$low_GHG_service_19)
+```
+#LowGHGService2019-Scope2Emission2020
+```{r}
+Service = lm(climate_dt$scope_2_market_20~climate_dt$low_GHG_service_19)
+summary(Service)
+```
+#Mediation Analysis: policy-target-emission
+```{r}
+
+summary(lm(climate_dt$public_policy_20~climate_dt$scope_1))
+summary(lm(climate_dt$emission_target_19~climate_dt$scope_1))
+#summary(lm(climate_dt$scope_2_loc_20~climate_dt$public_policy))
+
+summary(lm(climate_dt$public_policy_20~climate_dt$scope_1+climate_dt$emission_target_19))
+
+#Mediation
+#Total effect:2.709e-09
+#Indirect effect:12.51e-09*4.733e-02 = 0.592
+#Direct effect: 2.151e-09
+#Perform Sobel test:(90% confident)
+T = (12.51*10^(-9)*0.04733)/sqrt(((12.51)*10^(-9))^2*(0.01364^2) + (0.04733^2)*((4.499)*(10^(-9)))^2)
+5.92^(-10)+T*1.96*100
+5.92^(-10)-T*1.96*100
+
+```
+
+
+
+#public policy 2018 - scope 2 20market
+```{r}
+emissionPC0 = climate_dt$emis_percentage_20[climate_dt$emission_target_19 == 0]
+emissionPC1 = climate_dt$emis_percentage_20[climate_dt$emission_target_19 != 0]
+emissionPC2 = climate_dt$emis_percentage_20[climate_dt$emission_target_19 == 2]
+emissionPC3 = climate_dt$emis_percentage_20[climate_dt$emission_target_19 == 3]
+
+emissionPC0 = climate_dt$emis_percentage_20[climate_dt$emission_target == 0]
+emissionPC1 = climate_dt$emis_percentage_20[climate_dt$emission_target != 0]
+emissionPC2 = climate_dt$emis_percentage_20[climate_dt$emission_target == 2]
+emissionPC3 = climate_dt$emis_percentage_20[climate_dt$emission_target == 3]
+
+emissionPC0 = climate_dt$energy_percent_20[climate_dt$emission_target == 0]*5
+emissionPC1 = climate_dt$energy_percent_20[climate_dt$emission_target != 0]*5
+emissionPC2 = climate_dt$energy_percent_20[climate_dt$emission_target == 2]*5
+emissionPC3 = climate_dt$energy_percent_20[climate_dt$emission_target == 3]*5
+emissionPC0 = emissionPC0[]
+t.test(emissionPC0, emissionPC3)
+t.test(emissionPC0, emissionPC1)
+t.test(emissionPC0, emissionPC2)
+boxplot(emissionPC0, emissionPC1, emissionPC3, )
+```
+
+## 2018
+```{r cars}
+# water.2018 = read.csv("2018_Full_Water_Security_Dataset.csv")
+water.2018 = water.2018[, -4]
+water.2018 = water.2018[, -4]
+water.2018 = water.2018[, -4]
+water.2018 = water.2018[, -4]
+water.2018 = water.2018[, -4]
+water.2018 = water.2018[, -4]
+water.2018 = water.2018[, -9]
+water.2018 = water.2018[, -9]
+water.2018 = water.2018[, -12]
+water.2018.1.1 = water.2018[water.2018$question_number == 'W1.1',]
+water.2018.1.2 = water.2018[water.2018$question_number == 'W1.2',]
+water.2018.1.2b = water.2018[water.2018$question_number == 'W1.2b',]
+water.2018.1.2h = water.2018[water.2018$question_number == 'W1.2h',]
+water.2018.1.2i = water.2018[water.2018$question_number == 'W1.2i',]
+water.2018.4.1 = water.2018[water.2018$question_number == 'W4.1',]
+water.2018.4.1c = water.2018[water.2018$question_number == 'W4.1c',]
+water.2018.9.1 = water.2018[water.2018$question_number == 'W9.1',]
+water.2018.9.1a = water.2018[water.2018$question_number == 'W9.1a',]
+# water.2018 = rbind(water.2018.1.1, water.2018.1.2, water.2018.1.2b, water.2018.1.2h, water.2018.1.2i, water.2018.4.1, water.2018.4.1c, water.2018.9.1, water.2018.9.1a)
+# write.csv(water.2018, "water_2018.csv")
+```
+
+```{r}
+water.2018.1.1.1 <- water.2018.1.1[water.2018.1.1$column_number == "1",]
+water.2018.1.1.2 <- water.2018.1.1[water.2018.1.1$column_number == "2",]
+water.2018.1.2.1 <- water.2018.1.2[water.2018.1.2$column_number == "1",]
+water.2018.1.2b.1 <- water.2018.1.2b[water.2018.1.2b$column_number == "1",]
+water.2018.1.2h.1 <- water.2018.1.2h[water.2018.1.2h$column_number == "1",]
+water.2018.1.2h.2 <- water.2018.1.2h[water.2018.1.2h$column_number == "2",]
+water.2018.1.2i.1 <- water.2018.1.2i[water.2018.1.2i$column_number == "1",]
+water.2018.1.2i.2 <- water.2018.1.2i[water.2018.1.2i$column_number == "2",]
+# water.2018.4.1
+water.2018.4.1c.3 <- water.2018.4.1c[water.2018.4.1c$column_number == "3",]
+# water.2018.9.1
+water.2018.9.1a.1 <- water.2018.9.1a[water.2018.9.1a$column_number == "1",]
+```
+
+```{r 1.1}
+water.2018.1.1.1 <- water.2018.1.1.1[water.2018.1.1.1$response_value != "Have not evaluated",]
+water.2018.1.1.1 <- water.2018.1.1.1[water.2018.1.1.1$response_value != "",]
+water.2018.1.1.1$response_value[water.2018.1.1.1$response_value == "Vital"] <- 3
+water.2018.1.1.1$response_value[water.2018.1.1.1$response_value == "Not very important"] <- 2
+water.2018.1.1.1$response_value[water.2018.1.1.1$response_value == "Important"] <- 1
+water.2018.1.1.1$response_value[water.2018.1.1.1$response_value == "Neutral"] <- 0
+water.2018.1.1.1$response_value[water.2018.1.1.1$response_value == "Not very important"] <- -1
+water.2018.1.1.1$response_value[water.2018.1.1.1$response_value == "Not important at all"] <- -2
+water.2018.1.1.2 <- water.2018.1.1.2[water.2018.1.1.2$response_value != "Have not evaluated",]
+water.2018.1.1.2 <- water.2018.1.1.2[water.2018.1.1.2$response_value != "",]
+water.2018.1.1.2$response_value[water.2018.1.1.2$response_value == "Vital"] <- 3
+water.2018.1.1.2$response_value[water.2018.1.1.2$response_value == "Not very important"] <- 2
+water.2018.1.1.2$response_value[water.2018.1.1.2$response_value == "Important"] <- 1
+water.2018.1.1.2$response_value[water.2018.1.1.2$response_value == "Neutral"] <- 0
+water.2018.1.1.2$response_value[water.2018.1.1.2$response_value == "Not very important"] <- -1
+water.2018.1.1.2$response_value[water.2018.1.1.2$response_value == "Not important at all"] <- -2
+# water.2018.1.1.2
+```
+
+```{r 1.2}
+water.2018.1.2.1 <- water.2018.1.2.1[water.2018.1.2.1$response_value != "Not relevant",]
+water.2018.1.2.1 <- water.2018.1.2.1[water.2018.1.2.1$response_value != "Not monitored",]
+water.2018.1.2.1 <- water.2018.1.2.1[water.2018.1.2.1$response_value != "",]
+water.2018.1.2.1$response_value[water.2018.1.2.1$response_value == "Less than 1%"] <- 1
+water.2018.1.2.1$response_value[water.2018.1.2.1$response_value == "1-25"] <- 2
+water.2018.1.2.1$response_value[water.2018.1.2.1$response_value == "26-50"] <- 3
+water.2018.1.2.1$response_value[water.2018.1.2.1$response_value == "51-75"] <- 4
+water.2018.1.2.1$response_value[water.2018.1.2.1$response_value == "76-99"] <- 5
+water.2018.1.2.1$response_value[water.2018.1.2.1$response_value == "100%"] <- 6
+# water.2018.1.2.1
+```
+
+```{r 1.2h.1}
+water.2018.1.2h.1 <- water.2018.1.2h.1[water.2018.1.2h.1$response_value != "",]
+water.2018.1.2h.1$response_value[water.2018.1.2h.1$response_value == "Not relevant"] <- -1
+water.2018.1.2h.1$response_value[water.2018.1.2h.1$response_value == "Relevant"] <- 1
+water.2018.1.2h.1$response_value[water.2018.1.2h.1$response_value == "Relevant but volume unknown"] <- 0
+```
+
+```{r 1.2i.1}
+water.2018.1.2i.1 <- water.2018.1.2i.1[water.2018.1.2i.1$response_value != "",]
+water.2018.1.2i.1$response_value[water.2018.1.2i.1$response_value == "Not relevant"] <- -1
+water.2018.1.2i.1$response_value[water.2018.1.2i.1$response_value == "Relevant"] <- 1
+water.2018.1.2i.1$response_value[water.2018.1.2i.1$response_value == "Relevant but volume unknown"] <- 0
+```
+
+```{r 4.1}
+water.2018.4.1 <- water.2018.4.1[water.2018.4.1$response_value != "",]
+water.2018.4.1$response_value[water.2018.4.1$response_value == "No"] <- -1
+water.2018.4.1$response_value[water.2018.4.1$response_value == "Yes, both in direct operations and the rest of our value chain"] <- 1
+water.2018.4.1$response_value[water.2018.4.1$response_value == "Yes, only within our direct operations"] <- 1
+water.2018.4.1$response_value[water.2018.4.1$response_value == "Yes, only in our value chain beyond our direct operations"] <- 1
+water.2018.4.1c.3 <- water.2018.4.1c.3[water.2018.4.1c.3$response_value != "",]
+```
+
+```{r 9.1}
+water.2018.9.1 <- water.2018.9.1[water.2018.9.1$response_value != "",]
+water.2018.9.1$response_value[water.2018.9.1$response_value == "No"] <- -1
+water.2018.9.1$response_value[water.2018.9.1$response_value == "Yes"] <- 1
+```
+
+```{r 9.1a}
+water.2018.9.1a.1 <- water.2018.9.1a.1[water.2018.9.1a.1$response_value != "",]
+water.2018.9.1a.1$response_value[water.2018.9.1a.1$response_value == "Tradeoff"] <- -1
+water.2018.9.1a.1$response_value[water.2018.9.1a.1$response_value == "Linkage"] <- 1
+```
+
+```{r new 2018}
+water2.2018 = rbind(water.2018.1.1.1, water.2018.1.1.2, water.2018.1.2.1, water.2018.1.2b.1, water.2018.1.2h.1, water.2018.1.2h.2, water.2018.1.2i.1, water.2018.1.2i.2, water.2018.4.1, water.2018.4.1c.3, water.2018.9.1, water.2018.9.1a.1)
+write.csv(water2.2018, "water_2018.csv")
+```
+
+## 2019
+```{r}
+# water.2019 = read.csv("2019_Full_Water_Security_Dataset.csv")
+water.2019 = water.2019[, -4]
+water.2019 = water.2019[, -4]
+water.2019 = water.2019[, -4]
+water.2019 = water.2019[, -4]
+water.2019 = water.2019[, -4]
+water.2019 = water.2019[, -4]
+water.2019 = water.2019[, -9]
+water.2019 = water.2019[, -9]
+water.2019 = water.2019[, -12]
+water.2019.1.1 = water.2019[water.2019$question_number == 'W1.1',]
+water.2019.1.2 = water.2019[water.2019$question_number == 'W1.2',]
+water.2019.1.2b = water.2019[water.2019$question_number == 'W1.2b',]
+water.2019.1.2h = water.2019[water.2019$question_number == 'W1.2h',]
+water.2019.1.2i = water.2019[water.2019$question_number == 'W1.2i',]
+water.2019.4.1 = water.2019[water.2019$question_number == 'W4.1',]
+water.2019.4.1c = water.2019[water.2019$question_number == 'W4.1c',]
+water.2019.9.1 = water.2019[water.2019$question_number == 'W9.1',]
+water.2019.9.1a = water.2019[water.2019$question_number == 'W9.1a',]
+```
+
+```{r}
+water.2019.1.1.1 <- water.2019.1.1[water.2019.1.1$column_number == "1",]
+water.2019.1.1.2 <- water.2019.1.1[water.2019.1.1$column_number == "2",]
+water.2019.1.2.1 <- water.2019.1.2[water.2019.1.2$column_number == "1",]
+water.2019.1.2b.1 <- water.2019.1.2b[water.2019.1.2b$column_number == "1",]
+water.2019.1.2h.1 <- water.2019.1.2h[water.2019.1.2h$column_number == "1",]
+water.2019.1.2h.2 <- water.2019.1.2h[water.2019.1.2h$column_number == "2",]
+water.2019.1.2i.1 <- water.2019.1.2i[water.2019.1.2i$column_number == "1",]
+water.2019.1.2i.2 <- water.2019.1.2i[water.2019.1.2i$column_number == "2",]
+# water.2019.4.1
+water.2019.4.1c.3 <- water.2019.4.1c[water.2019.4.1c$column_number == "3",]
+# water.2019.9.1
+water.2019.9.1a.1 <- water.2019.9.1a[water.2019.9.1a$column_number == "1",]
+```
+
+```{r 1.1}
+water.2019.1.1.1 <- water.2019.1.1.1[water.2019.1.1.1$response_value != "Have not evaluated",]
+water.2019.1.1.1 <- water.2019.1.1.1[water.2019.1.1.1$response_value != "",]
+water.2019.1.1.1$response_value[water.2019.1.1.1$response_value == "Vital"] <- 3
+water.2019.1.1.1$response_value[water.2019.1.1.1$response_value == "Not very important"] <- 2
+water.2019.1.1.1$response_value[water.2019.1.1.1$response_value == "Important"] <- 1
+water.2019.1.1.1$response_value[water.2019.1.1.1$response_value == "Neutral"] <- 0
+water.2019.1.1.1$response_value[water.2019.1.1.1$response_value == "Not very important"] <- -1
+water.2019.1.1.1$response_value[water.2019.1.1.1$response_value == "Not important at all"] <- -2
+water.2019.1.1.2 <- water.2019.1.1.2[water.2019.1.1.2$response_value != "Have not evaluated",]
+water.2019.1.1.2 <- water.2019.1.1.2[water.2019.1.1.2$response_value != "",]
+water.2019.1.1.2$response_value[water.2019.1.1.2$response_value == "Vital"] <- 3
+water.2019.1.1.2$response_value[water.2019.1.1.2$response_value == "Not very important"] <- 2
+water.2019.1.1.2$response_value[water.2019.1.1.2$response_value == "Important"] <- 1
+water.2019.1.1.2$response_value[water.2019.1.1.2$response_value == "Neutral"] <- 0
+water.2019.1.1.2$response_value[water.2019.1.1.2$response_value == "Not very important"] <- -1
+water.2019.1.1.2$response_value[water.2019.1.1.2$response_value == "Not important at all"] <- -2
+# water.2019.1.1.2
+```
+
+```{r 1.2}
+water.2019.1.2.1 <- water.2019.1.2.1[water.2019.1.2.1$response_value != "Not relevant",]
+water.2019.1.2.1 <- water.2019.1.2.1[water.2019.1.2.1$response_value != "Not monitored",]
+water.2019.1.2.1 <- water.2019.1.2.1[water.2019.1.2.1$response_value != "",]
+water.2019.1.2.1$response_value[water.2019.1.2.1$response_value == "Less than 1%"] <- 1
+water.2019.1.2.1$response_value[water.2019.1.2.1$response_value == "1-25"] <- 2
+water.2019.1.2.1$response_value[water.2019.1.2.1$response_value == "26-50"] <- 3
+water.2019.1.2.1$response_value[water.2019.1.2.1$response_value == "51-75"] <- 4
+water.2019.1.2.1$response_value[water.2019.1.2.1$response_value == "76-99"] <- 5
+water.2019.1.2.1$response_value[water.2019.1.2.1$response_value == "100%"] <- 6
+# water.2019.1.2.1
+```
+
+```{r 1.2h.1}
+water.2019.1.2h.1 <- water.2019.1.2h.1[water.2019.1.2h.1$response_value != "",]
+water.2019.1.2h.1$response_value[water.2019.1.2h.1$response_value == "Not relevant"] <- -1
+water.2019.1.2h.1$response_value[water.2019.1.2h.1$response_value == "Relevant"] <- 1
+water.2019.1.2h.1$response_value[water.2019.1.2h.1$response_value == "Relevant but volume unknown"] <- 0
+```
+
+```{r 1.2i.1}
+water.2019.1.2i.1 <- water.2019.1.2i.1[water.2019.1.2i.1$response_value != "",]
+water.2019.1.2i.1$response_value[water.2019.1.2i.1$response_value == "Not relevant"] <- -1
+water.2019.1.2i.1$response_value[water.2019.1.2i.1$response_value == "Relevant"] <- 1
+water.2019.1.2i.1$response_value[water.2019.1.2i.1$response_value == "Relevant but volume unknown"] <- 0
+```
+
+```{r 4.1}
+water.2019.4.1 <- water.2019.4.1[water.2019.4.1$response_value != "",]
+water.2019.4.1$response_value[water.2019.4.1$response_value == "No"] <- -1
+water.2019.4.1$response_value[water.2019.4.1$response_value == "Yes, both in direct operations and the rest of our value chain"] <- 1
+water.2019.4.1$response_value[water.2019.4.1$response_value == "Yes, only within our direct operations"] <- 1
+water.2019.4.1$response_value[water.2019.4.1$response_value == "Yes, only in our value chain beyond our direct operations"] <- 1
+water.2019.4.1c.3 <- water.2019.4.1c.3[water.2019.4.1c.3$response_value != "",]
+```
+
+```{r 9.1}
+water.2019.9.1 <- water.2019.9.1[water.2019.9.1$response_value != "",]
+water.2019.9.1$response_value[water.2019.9.1$response_value == "No"] <- -1
+water.2019.9.1$response_value[water.2019.9.1$response_value == "Yes"] <- 1
+```
+
+```{r 9.1a}
+water.2019.9.1a.1 <- water.2019.9.1a.1[water.2019.9.1a.1$response_value != "",]
+water.2019.9.1a.1$response_value[water.2019.9.1a.1$response_value == "Tradeoff"] <- -1
+water.2019.9.1a.1$response_value[water.2019.9.1a.1$response_value == "Linkage"] <- 1
+```
+
+```{r new 2019}
+water2.2019 = rbind(water.2019.1.1.1, water.2019.1.1.2, water.2019.1.2.1, water.2019.1.2b.1, water.2019.1.2h.1, water.2019.1.2h.2, water.2019.1.2i.1, water.2019.1.2i.2, water.2019.4.1, water.2019.4.1c.3, water.2019.9.1, water.2019.9.1a.1)
+write.csv(water2.2019, "water_2019.csv")
+```
+
+## 2020
+```{r}
+# water.2020 = read.csv("2020_Full_Water_Security_Dataset.csv")
+water.2020 = water.2020[, -4]
+water.2020 = water.2020[, -4]
+water.2020 = water.2020[, -4]
+water.2020 = water.2020[, -4]
+water.2020 = water.2020[, -4]
+water.2020 = water.2020[, -4]
+water.2020 = water.2020[, -9]
+water.2020 = water.2020[, -9]
+water.2020 = water.2020[, -12]
+water.2020.1.1 = water.2020[water.2020$question_number == 'W1.1',]
+water.2020.1.2 = water.2020[water.2020$question_number == 'W1.2',]
+water.2020.1.2b = water.2020[water.2020$question_number == 'W1.2b',]
+water.2020.1.2h = water.2020[water.2020$question_number == 'W1.2h',]
+water.2020.1.2i = water.2020[water.2020$question_number == 'W1.2i',]
+water.2020.4.1 = water.2020[water.2020$question_number == 'W4.1',]
+water.2020.4.1c = water.2020[water.2020$question_number == 'W4.1c',]
+```
+
+```{r}
+water.2020.1.1.1 <- water.2020.1.1[water.2020.1.1$column_number == "1",]
+water.2020.1.1.2 <- water.2020.1.1[water.2020.1.1$column_number == "2",]
+water.2020.1.2.1 <- water.2020.1.2[water.2020.1.2$column_number == "1",]
+water.2020.1.2b.1 <- water.2020.1.2b[water.2020.1.2b$column_number == "1",]
+water.2020.1.2h.1 <- water.2020.1.2h[water.2020.1.2h$column_number == "1",]
+water.2020.1.2h.2 <- water.2020.1.2h[water.2020.1.2h$column_number == "2",]
+water.2020.1.2i.1 <- water.2020.1.2i[water.2020.1.2i$column_number == "1",]
+water.2020.1.2i.2 <- water.2020.1.2i[water.2020.1.2i$column_number == "2",]
+# water.2020.4.1
+water.2020.4.1c.2 <- water.2020.4.1c[water.2020.4.1c$column_number == "2",]
+```
+
+```{r 1.1}
+water.2020.1.1.1 <- water.2020.1.1.1[water.2020.1.1.1$response_value != "Have not evaluated",]
+water.2020.1.1.1 <- water.2020.1.1.1[water.2020.1.1.1$response_value != "",]
+water.2020.1.1.1$response_value[water.2020.1.1.1$response_value == "Vital"] <- 3
+water.2020.1.1.1$response_value[water.2020.1.1.1$response_value == "Not very important"] <- 2
+water.2020.1.1.1$response_value[water.2020.1.1.1$response_value == "Important"] <- 1
+water.2020.1.1.1$response_value[water.2020.1.1.1$response_value == "Neutral"] <- 0
+water.2020.1.1.1$response_value[water.2020.1.1.1$response_value == "Not very important"] <- -1
+water.2020.1.1.1$response_value[water.2020.1.1.1$response_value == "Not important at all"] <- -2
+water.2020.1.1.2 <- water.2020.1.1.2[water.2020.1.1.2$response_value != "Have not evaluated",]
+water.2020.1.1.2 <- water.2020.1.1.2[water.2020.1.1.2$response_value != "",]
+water.2020.1.1.2$response_value[water.2020.1.1.2$response_value == "Vital"] <- 3
+water.2020.1.1.2$response_value[water.2020.1.1.2$response_value == "Not very important"] <- 2
+water.2020.1.1.2$response_value[water.2020.1.1.2$response_value == "Important"] <- 1
+water.2020.1.1.2$response_value[water.2020.1.1.2$response_value == "Neutral"] <- 0
+water.2020.1.1.2$response_value[water.2020.1.1.2$response_value == "Not very important"] <- -1
+water.2020.1.1.2$response_value[water.2020.1.1.2$response_value == "Not important at all"] <- -2
+# water.2020.1.1.2
+```
+
+```{r 1.2}
+water.2020.1.2.1 <- water.2020.1.2.1[water.2020.1.2.1$response_value != "Not relevant",]
+water.2020.1.2.1 <- water.2020.1.2.1[water.2020.1.2.1$response_value != "Not monitored",]
+water.2020.1.2.1 <- water.2020.1.2.1[water.2020.1.2.1$response_value != "",]
+water.2020.1.2.1$response_value[water.2020.1.2.1$response_value == "Less than 1%"] <- 1
+water.2020.1.2.1$response_value[water.2020.1.2.1$response_value == "1-25"] <- 2
+water.2020.1.2.1$response_value[water.2020.1.2.1$response_value == "26-50"] <- 3
+water.2020.1.2.1$response_value[water.2020.1.2.1$response_value == "51-75"] <- 4
+water.2020.1.2.1$response_value[water.2020.1.2.1$response_value == "76-99"] <- 5
+water.2020.1.2.1$response_value[water.2020.1.2.1$response_value == "100%"] <- 6
+# water.2020.1.2.1
+```
+
+```{r 1.2h.1}
+water.2020.1.2h.1 <- water.2020.1.2h.1[water.2020.1.2h.1$response_value != "",]
+water.2020.1.2h.1$response_value[water.2020.1.2h.1$response_value == "Not relevant"] <- -1
+water.2020.1.2h.1$response_value[water.2020.1.2h.1$response_value == "Relevant"] <- 1
+water.2020.1.2h.1$response_value[water.2020.1.2h.1$response_value == "Relevant but volume unknown"] <- 0
+```
+
+```{r 1.2i.1}
+water.2020.1.2i.1 <- water.2020.1.2i.1[water.2020.1.2i.1$response_value != "",]
+water.2020.1.2i.1$response_value[water.2020.1.2i.1$response_value == "Not relevant"] <- -1
+water.2020.1.2i.1$response_value[water.2020.1.2i.1$response_value == "Relevant"] <- 1
+water.2020.1.2i.1$response_value[water.2020.1.2i.1$response_value == "Relevant but volume unknown"] <- 0
+```
+
+```{r 4.1}
+water.2020.4.1 <- water.2020.4.1[water.2020.4.1$response_value != "",]
+water.2020.4.1$response_value[water.2020.4.1$response_value == "No"] <- -1
+water.2020.4.1$response_value[water.2020.4.1$response_value == "Yes, both in direct operations and the rest of our value chain"] <- 1
+water.2020.4.1$response_value[water.2020.4.1$response_value == "Yes, only within our direct operations"] <- 1
+water.2020.4.1$response_value[water.2020.4.1$response_value == "Yes, only in our value chain beyond our direct operations"] <- 1
+water.2020.4.1c.2 <- water.2020.4.1c.2[water.2020.4.1c.2$response_value != "",]
+```
+
+```{r new 2020}
+water2.2020 = rbind(water.2020.1.1.1, water.2020.1.1.2, water.2020.1.2.1, water.2020.1.2b.1, water.2020.1.2h.1, water.2020.1.2h.2, water.2020.1.2i.1, water.2020.1.2i.2, water.2020.4.1, water.2020.4.1c.2)
+write.csv(water2.2020, "water_2020.csv")
+```
+
+## rewrite
+```{r}
+# rm(list=ls())
+# water.2018 = read.csv("water_2018.csv")
+# water.2019 = read.csv("water_2019.csv")
+# water.2020 = read.csv("water_2020.csv")
+# water.2018$response_value = as.numeric(water.2018$response_value)
+# water.2019$response_value = as.numeric(water.2019$response_value)
+# water.2020$response_value = as.numeric(water.2020$response_value)
+```
+
+Environmental:
+1.1: Rate the importance (current and future) of water quality and water quantity to the success of your business.
+column 1: direct importance rating: 6 most important - 0 least important
+column 2: indirect importance rating: 6 most important - 0 least important
+1.2: Across all your operations, what proportion of the following water aspects are regularly measured and monitored?
+column 1: % of sites/facilities/operations: <1: 1; 1-25:2; 26-50: 3; 51-75:4; 76-99:5; 100:6
+1.2b: What are the total volumes of water withdrawn, discharged, and consumed across all your operations?
+column 1: Volume (megaliters/year)
+1.2h:Provide total water withdrawal data by source.
+column 1: Relevance: Relevant: 1; Relevant but volume unknown: 0; not relevant: -1
+column 2: Volume (megaliters/year)
+1.2i:Provide total water discharge data by destination
+column 1: Relevance: Relevant: 1; Relevant but volume unknown: 0; not relevant: -1
+column 2: Volume (megaliters/year)
+
+Social:
+4.1: Have you identified any inherent water-related risks with the potential to have a substantive financial or strategic impact on your business?
+No: -1; Yes: 1
+4.1c: By river basin, what is the number and proportion of facilities exposed to water risks that could have a substantive impact on your business, and what is the potential business impact associated with those facilities?
+column 3(column 2 in 2020): Number of facilities exposed to water risk
+(2020 doesn't have 9.1 and 9.1a)
+9.1: Has your organization identified any linkages or tradeoffs between water and other environmental issues in its direct operations and/or other parts of its value chain?
+No: -1; Yes: 1
+9.1a: Describe the linkages or trade-offs and the related management policy or action
+column 1: trade-off: -1; linkage: 1
+
+```{r}
+#create test1 as x - varibale, 
+pick1 <- subset(water.2018.1.2.1,select = c("organization","account_number","column_number","response_value","question_number","survey_year"))
+test1 = inner_join(water.2018.1.2.1, water.2018.1.1.1, by = c("account_number"))
+test1 <- subset(test1,select =  c("organization.x","account_number","column_number.x","question_number.x","survey_year.x","response_value.x","response_value.y"))
+#rename dataframe
+test1 <- test1 %>% rename("organization"="organization.x","column_number"="column_number.x","question_number"="question_number.x","survey_year"="survey_year.x","response.1.2.1"="response_value.x","response.1.1.1" = "response_value.y")
+
+```
+```{r}
+#join another
+test2 = inner_join(test1, water.2018.1.2b.1, by = c("account_number"))
+test2 <- subset(test2,select =  c("organization.x","account_number","column_number.x","question_number.x","survey_year.x","response.1.1.1","response.1.2.1","response_value"))
+#rename dataframe
+test2 <- test2 %>% rename("organization"="organization.x","column_number"="column_number.x","question_number"="question_number.x","survey_year"="survey_year.x","response.1.2b.1" = "response_value")
+test2
+```
+```{r}
+test3 = inner_join(test2, water.2018.1.2h.1, by = c("account_number"))
+test3 <- subset(test3,select =  c("organization.x","account_number","column_number.x","question_number.x","survey_year.x","response.1.1.1","response.1.2.1","response.1.2b.1","response_value"))
+#rename dataframe
+test3 <- test3 %>% rename("organization"="organization.x","column_number"="column_number.x","question_number"="question_number.x","survey_year"="survey_year.x","response.1.2h.1" = "response_value")
+test3
+```
+```{r}
+test4 = inner_join(test3, water.2018.1.2h.2, by = c("account_number"))
+test4 <- subset(test4,select =  c("organization.x","account_number","column_number.x","question_number.x","survey_year.x","response.1.1.1","response.1.2.1","response.1.2b.1","response.1.2h.1","response_value"))
+#rename dataframe
+test4 <- test4 %>% rename("organization"="organization.x","column_number"="column_number.x","question_number"="question_number.x","survey_year"="survey_year.x","response.1.2h.2" = "response_value")
+test4
+```
+
+```{r}
+test5 = inner_join(test4, water.2018.1.2i.1, by = c("account_number"))
+test5 <- subset(test5,select =  c("organization.x","account_number","column_number.x","question_number.x","survey_year.x","response.1.1.1","response.1.2.1","response.1.2b.1","response.1.2h.1","response.1.2h.2","response_value"))
+#rename dataframe
+test5 <- test5 %>% rename("organization"="organization.x","column_number"="column_number.x","question_number"="question_number.x","survey_year"="survey_year.x","response.1.2i.1" = "response_value")
+```
+```{r}
+test6 = inner_join(test5, water.2018.1.2i.2, by = c("account_number"))
+test6 <- subset(test6,select =  c("organization.x","account_number","column_number.x","question_number.x","survey_year.x","response.1.1.1","response.1.2.1","response.1.2b.1","response.1.2h.1","response.1.2h.2","response.1.2i.1","response_value"))
+#rename dataframe
+test6 <- test6 %>% rename("organization"="organization.x","column_number"="column_number.x","question_number"="question_number.x","survey_year"="survey_year.x","response.1.2i.2" = "response_value")
+
+```
+```{r}
+##4.1
+
+test7 = inner_join(test6,water.2018.4.1, by = c("account_number"))
+test7 <- subset(test7,select =  c("organization.x","account_number","column_number.x","question_number.x","survey_year.x","response.1.1.1","response.1.2.1","response.1.2b.1","response.1.2h.1","response.1.2h.2","response.1.2i.1","response.1.2i.2","response_value"))
+#rename dataframe
+test7 <- test7 %>% rename("organization"="organization.x","column_number"="column_number.x","question_number"="question_number.x","survey_year"="survey_year.x","response.4.1" = "response_value")
+df1 <- test7
+df1
+```
+
+
+```{r}
+test7$response.4.1 <- factor(test7$response.4.1)
+test7$response.1.2i.1 <- factor(test7$response.1.2i.1)
+test7$response.1.2i.2 <- as.numeric(test7$response.1.2i.2)
+test7$response.1.2h.2 <- as.numeric(test7$response.1.2h.2)
+test7$response.1.2h.1 <- factor(test7$response.1.2h.1)
+test7$response.1.2b.1 <- as.numeric(test7$response.1.2b.1)
+test7$response.1.2.1 <- factor(test7$response.1.2.1)
+test7$response.1.1.1 <- factor(test7$response.1.1.1)
+
+#featureDF$labels = factor(featureDF$labels)
+
+
+
+
+
+
+
+
+
+
+
+
+```
+
+```{r}
+#train,generate random samples
+
+data_set_size <- floor(nrow(test7)/2)
+indexes <- sample(1:nrow(test7), size = data_set_size)
+training <- test7[indexes,]
+validation1 <- test7[-indexes,]
+training
+```
+```{r}
+
+training <- training[,6:13]
+```
+
+
+```{r}
+validation1 <- validation1[,6:13]
+```
+
+
+
+```{r}
+#define randome forest classifier
+rf_classifier <- randomForest(formula = response.4.1 ~ ., importance = TRUE, data=training, ntree=30, mtry=2,na.action =na.omit)
+```
+
+
+```{r}
+rf_classifier
+```
+
+
+```{r}
+varImpPlot(rf_classifier)
+```
+
+```{r}
+
+#create test1 as x - varibale, 
+pick1 <- subset(water.2018.4.1,select = c("organization","account_number","column_number","response_value","question_number","survey_year"))
+test1 = inner_join(water.2018.4.1, water.2018.4.1c.3, by = c("account_number"))
+test1 <- subset(test1,select =  c("organization.x","account_number","column_number.x","question_number.x","survey_year.x","response_value.x","response_value.y"))
+#rename dataframe
+test1 <- test1 %>% rename("organization"="organization.x","column_number"="column_number.x","question_number"="question_number.x","survey_year"="survey_year.x","response.4.1"="response_value.x","response.4.1c.3" = "response_value.y")
+
+```
+```{r}
+#join another
+#test2 = inner_join(test1, water.2018., by = c("account_number"))
+#test2 <- subset(test2,select =  c("organization.x","account_number","column_number.x","question_number.x","survey_year.x","response.1.1.1","response.1.2.1","response_value"))
+#rename dataframe
+#test2 <- test2 %>% rename("organization"="organization.x","column_number"="column_number.x","question_number"="question_number.x","survey_year"="survey_year.x","response.1.2b.1" = "response_value")
+#test2
+```
+```{r}
+#test3 = inner_join(test2, water.2018.1.2h.1, by = c("account_number"))
+#test3 <- subset(test3,select =  c("organization.x","account_number","column_number.x","question_number.x","survey_year.x","response.1.1.1","response.1.2.1","response.1.2b.1","response_value"))
+#rename dataframe
+#test3 <- test3 %>% rename("organization"="organization.x","column_number"="column_number.x","question_number"="question_number.x","survey_year"="survey_year.x","response.1.2h.1" = "response_value")
+#test3
+
+```
+```{r}
+test8 = inner_join(test7,water.2018.4.1c.3, by = c("account_number"))
+ test8 <- subset(test8,select =  c("organization.x","account_number","column_number.x","question_number.x","survey_year.x","response.1.1.1","response.1.2.1","response.1.2b.1","response.1.2h.1","response.1.2h.2","response.1.2i.1","response.1.2i.2","response.4.1", "response_value"))
+# #rename dataframe
+ test8 <- test8 %>% rename("organization"="organization.x","column_number"="column_number.x","question_number"="question_number.x","survey_year"="survey_year.x","response.4.1c.3" = "response_value")
+# 
+ test9 = inner_join(test8,water.2018.9.1, by = c("account_number"))
+ test9 <- subset(test9,select =  c("organization.x","account_number","column_number.x","question_number.x","survey_year.x","response.1.1.1","response.1.2.1","response.1.2b.1","response.1.2h.1","response.1.2h.2","response.1.2i.1","response.1.2i.2","response.4.1", "response.4.1c.3", "response_value"))
+ #rename dataframe
+```
+
+
+```{r}
+test9 <- test9 %>% rename("organization"="organization.x","column_number"="column_number.x","question_number"="question_number.x","survey_year"="survey_year.x","response.9.1" = "response_value")
+```
+
+
+```{r}
+# 
+ test10 = inner_join(test9,water.2018.9.1a.1, by = c("account_number"))
+ test10 <- subset(test10,select =  c("organization.x","account_number","column_number.x","question_number.x","survey_year.x","response.1.1.1","response.1.2.1","response.1.2b.1","response.1.2h.1","response.1.2h.2","response.1.2i.1","response.1.2i.2","response.4.1","response.4.1c.3","response.9.1",
+                                     "response_value"))
+ #rename dataframe
+ test10 <- test10 %>% rename("organization"="organization.x","column_number"="column_number.x","question_number"="question_number.x","survey_year"="survey_year.x","response.9.1a" = "response_value")
+```
+```{r}
+
+test10$response.9.1a <- factor(test10$response.9.1a)
+test10$response.9.1 <- factor(test10$response.9.1)
+test10$response.4.1 <- factor(test10$response.4.1)
+test10$response.4.1c.3 <- as.numeric(test10$response.4.1c.3)
+#training <- training[,6:16]
+#training <- training[,6:16]
+#featureDF$labels = factor
+#(featureDF$labels)
+test10
+```
+```{r}
+df_social <- test10
+df_social <- subset(df_social,select =  c("response.4.1","response.4.1c.3","response.9.1", "response.9.1a","response.1.1.1"))
+df_social
+```
+```{r}
+data_set_size <- floor(nrow(df_social)/2)
+indexes <- sample(1:nrow(df_social), size = data_set_size)
+training2 <- df_social[indexes,]
+validation2 <- df_social[-indexes,]
+```
+
+```{r}
+training2
+```
+
+
+```{r}
+rf_classifier <- randomForest(formula = response.1.1.1 ~ ., importance = TRUE,data=training2, ntree=100, mtry=2,na.action =na.omit)
+```
+
+
+
+```{r}
+rf_classifier
+```
+```{r}
+varImpPlot(rf_classifier)
+```
+
+
+```{r}
+pick2 <- subset(water.2018.4.1,select = c("account_number","response_value"))
+test4.1 = inner_join(water.2018.4.1, water.2019.4.1, by = c("account_number"))
+test4.1 <- subset(test4.1,select =  c("account_number","response_value.x","response_value.y"))
+test4.1 <- test4.1 %>% rename("response.2018"="response_value.x","response.2019" = "response_value.y")
+test4.1.2 = inner_join(test4.1, water.2020.4.1, by = c("account_number"))
+test4.1.2 <- subset(test4.1.2,select =  c("account_number","response.2018","response.2019","response_value"))
+test4.1.2 <- test4.1.2 %>% rename("response.2020" = "response_value")
+
+test4.1.2$response.2018 = as.numeric(test4.1.2$response.2018)
+test4.1.2$response.2019 = as.numeric(test4.1.2$response.2019)
+test4.1.2$response.2020 = as.numeric(test4.1.2$response.2020)
+summary(lm(response.2020~response.2018+response.2019, test4.1.2))
+```
+
+```{r}
+pick3 <- subset(water.2018.1.1.1,select = c("account_number","response_value"))
+test1.1 = inner_join(water.2018.1.1.1, water.2019.1.1.1, by = c("account_number"))
+test1.1 <- subset(test1.1,select =  c("account_number","response_value.x","response_value.y"))
+test1.1 <- test1.1 %>% rename("response.2018"="response_value.x","response.2019" = "response_value.y")
+test1.1.2 = inner_join(test1.1, water.2020.1.1.1, by = c("account_number"))
+test1.1.2 <- subset(test1.1.2,select =  c("account_number","response.2018","response.2019","response_value"))
+test1.1.2 <- test1.1.2 %>% rename("response.2020" = "response_value")
+
+test1.1.2$response.2018 = as.numeric(test1.1.2$response.2018)
+test1.1.2$response.2019 = as.numeric(test1.1.2$response.2019)
+test1.1.2$response.2020 = as.numeric(test1.1.2$response.2020)
+summary(lm(response.2020~response.2018+response.2019, test1.1.2))
+```
+
+
+
+## R Markdown
+
+```{r}
+# setwd("/Users/apple/Desktop/math189/cdp-unlocking-climate-solutions")
+# cities.2020 <- fread("Cities/Cities Responses/2020_Full_Cities_Dataset.csv")
+# cities.2019 <- fread("Cities/Cities Responses/2019_Full_Cities_Dataset.csv")
+# cities.2018 <- fread("Cities/Cities Responses/2018_Full_Cities_Dataset.csv")
+```
+```{r}
+questions.2018 <- unique(cities.2018$`Question Number`)
+questions.2019 <- unique(cities.2019$`Question Number`)
+questions.2020 <- unique(cities.2020$`Question Number`)
+common_question <- sort(intersect(intersect(questions.2018,questions.2019),questions.2020))
+```
+
+```{r}
+transform <- function(dt, var) {
+dt_cities <- data.table()
+dt_cities$'Account Number' <- unique(dt$'Account Number')
+# colnames(dt_cities) <- unique(dt$'Question Number')
+dt$var <- paste(dt$'Question Number', dt$'Column Number', dt$'Row Number', sep="/")
+for (i in var){
+  print(i)
+  new_dt <- dt[dt$var == i][,c("Account Number", "Response Answer")]
+  colnames(new_dt)[2] <- i
+  dt_cities<- merge(new_dt, dt_cities, by="Account Number",all=TRUE)
+}
+return(dt_cities)
+}
+#2018的问题有很多和19，20不一样
+cities_var_2018 <- c("2.0/0/0", "4.0/0/0", "5.0/0/0", "5.5/0/0", "6.1/0/0", "7.6/1/1", "7.6/2/1", "7.6/3/1","8.4/0/0","11.0/0/0", "14.2/0/0")
+cities_2018_dt <- transform(cities.2018, cities_var_2018)
+  
+cities_var_2019 <- c("2.0/0/0", "4.0/0/0", "5.0/0/0", "5.5/0/0", "6.1/0/0", "7.6/1/1", "7.6/2/1", "7.6/3/1","8.4/0/0","11.0/0/0", "14.2/0/0")
+cities_2019_dt <- transform(cities.2019, cities_var_2019)
+
+cities_var_2020 <- c("2.0/0/0", "4.0/0/0", "5.0/0/0", "5.5/0/0", "6.1/0/0", "7.6/1/1", "7.6/2/1", "7.6/3/1","8.4/0/0","11.0/0/0", "14.2/0/0")
+cities_2020_dt <- transform(cities.2020, cities_var_2020)
+
+col_18 <- c("Account Number", "ppl_portable_water_percentage", "size_park_space_km2" ,"electricity_percentage_zero_carbon", "scope2_emission", "scope1_emission", "total_emission",  "colaborate_voluntary_business", "metigation_plan", "GHG_emission_target","citywide_emmision_inventory", "incorporate_sustainability_goals")
+col_19 <- c("Account Number", "ppl_portable_water_percentage","size_park_space_km2", "electricity_percentage_zero_carbon", "scope2_emission", "scope1_emission", "total_emission",  "colaborate_voluntary_business", "metigation_plan", "GHG_emission_target","citywide_emmision_inventory", "incorporate_sustainability_goals")
+col_20 <- c("Account Number", "ppl_portable_water_percentage","size_park_space_km2", "electricity_percentage_zero_carbon", "scope2_emission", "scope1_emission", "total_emission",  "colaborate_voluntary_business", "metigation_plan", "GHG_emission_target","citywide_emmision_inventory", "incorporate_sustainability_goals")
+colnames(cities_2018_dt)<- col_18
+colnames(cities_2019_dt)<- col_19
+colnames(cities_2020_dt)<- col_20
+
+
+```
+
+
+```{r}
+#cities_2020_dt_dropped <- subset( cities_2020_dt, select = -c(electricity_percentage_zero_carbon, strategy_for_green_growth, ESG_in_retirement_fund, ) )
+cities_dt<- merge(cities_2019_dt,cities_2020_dt, by="Account Number")
+col <- c("Account Number", "ppl_portable_water_percentage_19","size_park_space_km2_19", "electricity_percentage_zero_carbon_19", "scope2_emission_19", "scope1_emission_19", "total_emission_19",  "colaborate_voluntary_business_19", "metigation_plan_19", "GHG_emission_target_19","citywide_emmision_inventory_19", "incorporate_sustainability_goals_19", "ppl_portable_water_percentage_20","size_park_space_km2_20", "electricity_percentage_zero_carbon_20", "scope2_emission_20", "scope1_emission_20", "total_emission_20",  "colaborate_voluntary_business_20", "metigation_plan_20", "GHG_emission_target_20","citywide_emmision_inventory_20", "incorporate_sustainability_goals_20")
+colnames(cities_dt)<- col
+```
+
+
+
+```{r}
+cities_dt$ppl_portable_water_percentage_19 <- as.numeric(cities_dt$ppl_portable_water_percentage_19,na.rm = TRUE)
+cities_dt$scope1_emission_19 <- as.numeric(cities_dt$scope1_emission_19,na.rm = TRUE)
+cities_dt$scope2_emission_19 <- as.numeric(cities_dt$scope2_emission_19,na.rm = TRUE)
+cities_dt$size_park_space_km2_19 <- as.numeric(cities_dt$size_park_space_km2_19,na.rm = TRUE)
+cities_dt$electricity_percentage_zero_carbon_19 <- as.numeric(cities_dt$electricity_percentage_zero_carbon_19,na.rm = TRUE)
+cities_dt$total_emission_19 <- as.numeric(cities_dt$total_emission_19,na.rm = TRUE)
+
+cities_dt$ppl_portable_water_percentage_20 <- as.numeric(cities_dt$ppl_portable_water_percentage_20,na.rm = TRUE)
+cities_dt$scope1_emission_20 <- as.numeric(cities_dt$scope1_emission_20,na.rm = TRUE)
+cities_dt$scope2_emission_20 <- as.numeric(cities_dt$scope2_emission_20,na.rm = TRUE)
+cities_dt$size_park_space_km2_20 <- as.numeric(cities_dt$size_park_space_km2_20,na.rm = TRUE)
+cities_dt$electricity_percentage_zero_carbon_20 <- as.numeric(cities_dt$electricity_percentage_zero_carbon_20,na.rm = TRUE)
+cities_dt$total_emission_20 <- as.numeric(cities_dt$total_emission_20,na.rm = TRUE)
+
+cities_dt$colaborate_voluntary_business_19[cities_dt$colaborate_voluntary_business_19 == "Yes"] <- 3
+cities_dt$colaborate_voluntary_business_19[cities_dt$colaborate_voluntary_business_19 == "In progress"] <- 2
+cities_dt$colaborate_voluntary_business_19[cities_dt$colaborate_voluntary_business_19 == "Intending to undertake in the next 2 years"] <- 1
+cities_dt$colaborate_voluntary_business_19[cities_dt$colaborate_voluntary_business_19 == "Not intending to undertake"] <- 0
+cities_dt$colaborate_voluntary_business_19[cities_dt$colaborate_voluntary_business_19 == "Do not know"] <- 0
+cities_dt$colaborate_voluntary_business_19 <- as.numeric(cities_dt$colaborate_voluntary_business_19)
+
+cities_dt$colaborate_voluntary_business_20[cities_dt$colaborate_voluntary_business_20 == "Yes"] <- 3
+cities_dt$colaborate_voluntary_business_20[cities_dt$colaborate_voluntary_business_20 == "In progress"] <- 2
+cities_dt$colaborate_voluntary_business_20[cities_dt$colaborate_voluntary_business_20 == "Intending to undertake in the next 2 years"] <- 1
+cities_dt$colaborate_voluntary_business_20[cities_dt$colaborate_voluntary_business_20 == "Not intending to undertake"] <- 0
+cities_dt$colaborate_voluntary_business_20[cities_dt$colaborate_voluntary_business_20 == "Do not know"] <- 0
+cities_dt$colaborate_voluntary_business_20 <- as.numeric(cities_dt$colaborate_voluntary_business_20)
+
+
+cities_dt$metigation_plan_19[cities_dt$metigation_plan_19 == "Yes"] <- 3
+cities_dt$metigation_plan_19[cities_dt$metigation_plan_19 == "In progress"] <- 2
+cities_dt$metigation_plan_19[cities_dt$metigation_plan_19 == "Intending to undertake in the next 2 years"] <- 1
+cities_dt$metigation_plan_19[cities_dt$metigation_plan_19 == "Not intending to undertake"] <- 0
+cities_dt$metigation_plan_19[cities_dt$metigation_plan_19 == "Do not know"] <- 0
+cities_dt$metigation_plan_19[cities_dt$metigation_plan_19 == ""] <- NA
+cities_dt$metigation_plan_19 <- as.numeric(cities_dt$metigation_plan_19)
+
+cities_dt$metigation_plan_20[cities_dt$metigation_plan_20 == "Yes"] <- 3
+cities_dt$metigation_plan_20[cities_dt$metigation_plan_20 == "In progress"] <- 2
+cities_dt$metigation_plan_20[cities_dt$metigation_plan_20 == "Intending to undertake in the next 2 years"] <- 1
+cities_dt$metigation_plan_20[cities_dt$metigation_plan_20 == "Not intending to undertake"] <- 0
+cities_dt$metigation_plan_20[cities_dt$metigation_plan_20 == "Do not know"] <- 0
+cities_dt$metigation_plan_20[cities_dt$metigation_plan_20 == ""] <- NA
+cities_dt$metigation_plan_20 <- as.numeric(cities_dt$metigation_plan_20)
+
+cities_dt$GHG_emission_target_19[cities_dt$GHG_emission_target_19 == "Base year emissions (absolute) target"] <- 4
+cities_dt$GHG_emission_target_19[cities_dt$GHG_emission_target_19 == "Fixed level target"] <- 3
+cities_dt$GHG_emission_target_19[cities_dt$GHG_emission_target_19 == "Base year intensity target"] <- 2
+cities_dt$GHG_emission_target_19[cities_dt$GHG_emission_target_19 == "Baseline scenario (business as usual) target"] <- 1
+cities_dt$GHG_emission_target_19[cities_dt$GHG_emission_target_19 == "No target"] <- 0
+cities_dt$GHG_emission_target_19[cities_dt$GHG_emission_target_19 == ""] <- NA
+cities_dt$GHG_emission_target_19 <- as.numeric(cities_dt$GHG_emission_target_19)
+
+cities_dt$GHG_emission_target_20[cities_dt$GHG_emission_target_20 == "Base year emissions (absolute) target"] <- 4
+cities_dt$GHG_emission_target_20[cities_dt$GHG_emission_target_20 == "Fixed level target"] <- 3
+cities_dt$GHG_emission_target_20[cities_dt$GHG_emission_target_20 == "Base year intensity target"] <- 2
+cities_dt$GHG_emission_target_20[cities_dt$GHG_emission_target_20 == "Baseline scenario (business as usual) target"] <- 1
+cities_dt$GHG_emission_target_20[cities_dt$GHG_emission_target_20 == "No target"] <- 0
+cities_dt$GHG_emission_target_20[cities_dt$GHG_emission_target_20 == ""] <- NA
+cities_dt$GHG_emission_target_20 <- as.numeric(cities_dt$GHG_emission_target_20)
+
+cities_dt$citywide_emmision_inventory_19[cities_dt$citywide_emmision_inventory_19 == "Yes"] <- 3
+cities_dt$citywide_emmision_inventory_19[cities_dt$citywide_emmision_inventory_19 == "In progress"] <- 2
+cities_dt$citywide_emmision_inventory_19[cities_dt$citywide_emmision_inventory_19 == "Intending to undertake in the next 2 years"] <- 1
+cities_dt$citywide_emmision_inventory_19[cities_dt$citywide_emmision_inventory_19 == "Not intending to undertake"] <- 0
+cities_dt$citywide_emmision_inventory_19[cities_dt$citywide_emmision_inventory_19 == ""] <- NA
+cities_dt$citywide_emmision_inventory_19 <- as.numeric(cities_dt$citywide_emmision_inventory_19)
+
+cities_dt$citywide_emmision_inventory_20[cities_dt$citywide_emmision_inventory_20 == "Yes"] <- 3
+cities_dt$citywide_emmision_inventory_20[cities_dt$citywide_emmision_inventory_20 == "In progress"] <- 2
+cities_dt$citywide_emmision_inventory_20[cities_dt$citywide_emmision_inventory_20 == "Intending to undertake in the next 2 years"] <- 1
+cities_dt$citywide_emmision_inventory_20[cities_dt$citywide_emmision_inventory_20 == "Not intending to undertake"] <- 0
+cities_dt$citywide_emmision_inventory_20[cities_dt$citywide_emmision_inventory_20 == ""] <- NA
+cities_dt$citywide_emmision_inventory_20 <- as.numeric(cities_dt$citywide_emmision_inventory_20)
+
+cities_dt$incorporate_sustainability_goals_19[cities_dt$incorporate_sustainability_goals_19 == "Yes"] <- 3
+cities_dt$incorporate_sustainability_goals_19[cities_dt$incorporate_sustainability_goals_19 == "In progress"] <- 2
+cities_dt$incorporate_sustainability_goals_19[cities_dt$incorporate_sustainability_goals_19 == "Intending to undertake in the next 2 years"] <- 1
+cities_dt$incorporate_sustainability_goals_19[cities_dt$incorporate_sustainability_goals_19 == "Not intending to undertake"] <- 0
+cities_dt$incorporate_sustainability_goals_19[cities_dt$incorporate_sustainability_goals_19 == "Do not know"] <- 0
+cities_dt$incorporate_sustainability_goals_19[cities_dt$incorporate_sustainability_goals_19 == ""] <- NA
+cities_dt$incorporate_sustainability_goals_19 <- as.numeric(cities_dt$incorporate_sustainability_goals_19)
+
+cities_dt$incorporate_sustainability_goals_20[cities_dt$incorporate_sustainability_goals_20 == "Yes"] <- 3
+cities_dt$incorporate_sustainability_goals_20[cities_dt$incorporate_sustainability_goals_20 == "In progress"] <- 2
+cities_dt$incorporate_sustainability_goals_20[cities_dt$incorporate_sustainability_goals_20 == "Intending to undertake in the next 2 years"] <- 1
+cities_dt$incorporate_sustainability_goals_20[cities_dt$incorporate_sustainability_goals_20 == "Not intending to undertake"] <- 0
+cities_dt$incorporate_sustainability_goals_20[cities_dt$incorporate_sustainability_goals_20 == "Do not know"] <- 0
+cities_dt$incorporate_sustainability_goals_20[cities_dt$incorporate_sustainability_goals_20 == ""] <- NA
+cities_dt$incorporate_sustainability_goals_20 <- as.numeric(cities_dt$incorporate_sustainability_goals_20)
+
+
+
+```
+
+```{r}
+park_to_scope1 <- lm(scope1_emission_20 ~ size_park_space_km2_19, data=cities_dt, na.action = na.omit)
+summary(park_to_scope1)
+park_to_scope2 <- lm(scope2_emission_20 ~ size_park_space_km2_19, data=cities_dt, na.action = na.omit)
+summary(park_to_scope2)
+```
+
+```{r}
+library(dplyr)
+library(leaps)
+inventory_to_scope2 <- lm(scope2_emission_20 ~ citywide_emmision_inventory_19, data=cities_dt, na.action = na.omit)
+summary(inventory_to_scope2)
+inventory_to_scope1 <- lm(scope1_emission_20 ~ citywide_emmision_inventory_19, data=cities_dt, na.action = na.omit)
+summary(inventory_to_scope1)
+
+```
+
+
+
+
+
+
