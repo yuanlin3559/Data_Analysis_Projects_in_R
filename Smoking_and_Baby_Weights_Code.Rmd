@@ -1,0 +1,290 @@
+---
+title: "Project 1"
+author: "Group 29"
+date: "1/21/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+suppressPackageStartupMessages(library(data.table))
+library(tidyverse)
+library(dplyr)
+```
+
+
+```{r , echo = FALSE}
+#setwd('/Users/apple/Desktop/Math_189')
+babies23 = fread("babies23.txt")
+```
+
+## Data
+#take out the outlier for smoke and weight
+```{r, include = FALSE}
+colnames(babies23)[13] <- "wt.1"
+distinct(babies23,pluralty)
+distinct(babies23,outcome)
+distinct(babies23,gestation)
+babies23 <- babies23[!babies23$wt == '999',]
+babies23 <- babies23[!babies23$smoke == '9',]
+
+```
+
+#classify data into two groups -- smoker and non-smoker
+```{r classified, include = FALSE}
+nonsmoke = babies23[babies23$smoke == '0',]
+smoker = babies23[babies23$smoke != '0', ]
+```
+
+#numerical summary for smoker
+#mean,SD,quartile
+```{r, include = FALSE}
+mean_weight <- mean(smoker[["wt"]])
+sd_weight <- sd(smoker[["wt"]])
+quantile(smoker[["wt"]])
+weight_lowerquantile = 120
+mean_weight
+sd_weight
+```
+
+#numerical summary for non-smoker
+#mean,SD,quartile
+```{r, include = FALSE}
+mean_weight <- mean(nonsmoke[["wt"]])
+sd_weight <- sd(nonsmoke[["wt"]])
+quantile(nonsmoke[["wt"]])
+weight_lowerquantile = 120
+mean_weight
+sd_weight
+```
+
+## Q2 Compare the distributions graphically
+#histogram , box plot
+
+#box plot for smoker and nonsmoker against weight
+```{r boxplot, echo=FALSE}
+boxplot(smoker[["wt"]],nonsmoke[["wt"]],
+        main = 'Multiple boxes of baby weight',
+        names = c("Smoker","Nonsmoker"),
+        las = 2, 
+        notch= TRUE, 
+        xlab = 'Birth weight in ounces',
+        col = c('red','blue'),
+        border = 'black',
+        horizontal = TRUE)
+```
+
+
+#histogram of weight for smoker and non-smoker's babies
+```{r histogram, echo = FALSE}
+par(mfrow = c(1,2))
+hist(nonsmoke$wt, main = "Non-smokers babies weight", xlab = "babies weight", xlim = c(50, 180))
+hist(smoker$wt, main = "smokers babies weight", xlab = "babies weight", xlim = c(50, 180))
+```
+
+## Q3
+#Testing on reliability of the result.
+
+#calculate the frequency of the low birth weight for smoker and non-smoker separately
+```{r frequency, echo = FALSE}
+# low.weight.babies = babies23[babies23$wt <  ]
+incidence_smoke_low = nrow(smoker[which(smoker$wt < 88)])
+incidence_smoke = nrow(smoker)
+incidence_smoke
+incidence_smoke_low
+low_babies_smoke_frequency = nrow(smoker[which(smoker$wt < 88)])/nrow(smoker)
+low_babies_smoke_frequency
+
+incidence_nonsmoke_low = nrow(nonsmoke[which(nonsmoke$wt < 88)])
+incidence_nonsmoke = nrow(nonsmoke)
+incidence_nonsmoke
+incidence_nonsmoke_low
+low_babies_smoke_frequency = incidence_nonsmoke_low/incidence_nonsmoke
+low_babies_smoke_frequency
+```
+
+#To check the reliability of the result, we try to increase the boundary of low birth weight by 1%, and see it's influence on the incidence and frequency.
+```{r frequency, echo=FALSE}
+# low.weight.babies = babies23[babies23$wt <  ]
+new_bound=88*1.01
+new_bound
+incidence_smoke_low = nrow(smoker[which(smoker$wt < new_bound)])
+incidence_smoke_low
+incidence_smoke = nrow(smoker)
+incidence_smoke
+low_babies_smoke_frequency = nrow(smoker[which(smoker$wt < new_bound)])/nrow(smoker)
+low_babies_smoke_frequency
+0.06744868/ 0.06158358 - 1
+
+incidence_nonsmoke_low = nrow(nonsmoke[which(nonsmoke$wt < new_bound)])
+incidence_nonsmoke_low
+incidence_nonsmoke = nrow(nonsmoke)
+incidence_nonsmoke
+low_babies_nonsmoke_frequency = incidence_nonsmoke_low/incidence_nonsmoke
+low_babies_nonsmoke_frequency
+0.03125 / 0.02941176 - 1
+```
+
+#To check the reliability of the result, we try to decrease the boundary of low birth weight by 1%, and see it's influence on the incidence and frequency.
+```{r frequency, echo=FALSE}
+# low.weight.babies = babies23[babies23$wt <  ]
+new_bound=88*0.99
+new_bound
+incidence_smoke_low = nrow(smoker[which(smoker$wt < new_bound)])
+incidence_smoke_low
+incidence_smoke = nrow(smoker)
+incidence_smoke
+low_babies_smoke_frequency = nrow(smoker[which(smoker$wt < new_bound)])/nrow(smoker)
+low_babies_smoke_frequency
+
+incidence_nonsmoke_low = nrow(nonsmoke[which(nonsmoke$wt < new_bound)])
+incidence_nonsmoke_low
+incidence_nonsmoke = nrow(nonsmoke)
+incidence_nonsmoke
+low_babies_nonsmoke_frequency = incidence_nonsmoke_low/incidence_nonsmoke
+low_babies_nonsmoke_frequency
+```
+
+#Use histogram to estimate the fx(a)
+```{r frequency, echo=FALSE}
+bin_num = (nrow(smoker))^(1/3)
+interval_1=(180-50)/9
+hist(smoker$wt, main="smokers babies weight",breaks = c(50,50+interval_1, 50+2*interval_1, 50+3*interval_1, 50+4*interval_1, 50+5*interval_1, 50+6*interval_1, 50+7*interval_1, 50+8*interval_1, 180), xlab="babies weight", xlim=c(50, 180))
+
+bound = 88
+#hence it is in the B3.Incidence for the original bound
+area_1 = nrow(smoker[smoker[["wt"]]<50+interval_1])+nrow(smoker[ 50+interval_1 < smoker[["wt"]] & smoker[["wt"]] <50+2*interval_1])+((88-50-2*interval_1)/interval_1)*nrow(smoker[ 50+2*interval_1 <smoker[["wt"]] & smoker[["wt"]]<50+3*interval_1])
+area_1
+
+#incidence for the new bound
+new_bound=88*1.01
+area_2 = nrow(smoker[smoker[["wt"]]<50+interval_1])+nrow(smoker[ 50+interval_1 < smoker[["wt"]] & smoker[["wt"]] <50+2*interval_1])+((new_bound-50-2*interval_1)/interval_1)*nrow(smoker[ 50+2*interval_1 <smoker[["wt"]] & smoker[["wt"]]<50+3*interval_1])
+area_2
+
+new_bound=88*0.99
+area_3 = nrow(smoker[smoker[["wt"]]<50+interval_1])+nrow(smoker[ 50+interval_1 < smoker[["wt"]] & smoker[["wt"]] <50+2*interval_1])+((new_bound-50-2*interval_1)/interval_1)*nrow(smoker[ 50+2*interval_1 <smoker[["wt"]] & smoker[["wt"]]<50+3*interval_1])
+area_3
+```
+```{r frequency, echo=FALSE}
+bin_num_non = (nrow(nonsmoke))^(1/3)
+interval_2 = (180-50)/8
+hist(nonsmoke$wt, main = "non-smokers babies weight",breaks = c(50,50+interval_2, 50+2*interval_2, 50+3*interval_2, 50+4*interval_2, 50+5*interval_2, 50+6*interval_2, 50+7*interval_2, 180), xlab = "babies weight", xlim = c(50, 180))
+
+bound = 88
+#hence it is in the B3.Incidence for the original bound
+area_4 = nrow(nonsmoke[nonsmoke[["wt"]]<50+interval_2])+nrow(nonsmoke[ 50+interval_2 < nonsmoke[["wt"]] & nonsmoke[["wt"]] <50+2*interval_2])+((88-50-2*interval_2)/interval_2)*nrow(nonsmoke[ 50+2*interval_2 <nonsmoke[["wt"]] & nonsmoke[["wt"]]<50+3*interval_2])
+area_4
+
+#incidence for the new bound
+new_bound=88*1.01
+area_5 = nrow(nonsmoke[nonsmoke[["wt"]]<50+interval_2])+nrow(nonsmoke[ 50+interval_2 < nonsmoke[["wt"]] & nonsmoke[["wt"]] <50+2*interval_2])+((new_bound-50-2*interval_2)/interval_2)*nrow(nonsmoke[ 50+2*interval_2 <nonsmoke[["wt"]] & nonsmoke[["wt"]]<50+3*interval_2])
+area_5
+
+new_bound=88*0.99
+area_6 = nrow(nonsmoke[nonsmoke[["wt"]]<50+interval_2])+nrow(nonsmoke[ 50+interval_2 < nonsmoke[["wt"]] & nonsmoke[["wt"]] <50+2*interval_2])+((new_bound-50-2*interval_2)/interval_2)*nrow(nonsmoke[ 50+2*interval_2 <nonsmoke[["wt"]] & nonsmoke[["wt"]]<50+3*interval_2])
+area_6
+#original boundary
+```
+
+# Perform Welch two-sample t-test to test the mean of one group is equal to the mean of other group. The population of mothers who don't smoke are denoted by x, and the population of mothers who smoke is denoted by y. The null hypothesis of testing is that H0 : mean(x) = mean(y), and the alternative hypotheis is that H1: mean(x) != mean(y).
+            
+```{r Welch two-sample t-test, echo = FALSE}
+t.test(nonsmoke$wt, smoker$wt)
+```
+
+# Multivariate regression
+#Try to discover if there are any other variables that may influence babies' birth weight
+```{r multivariate regression, echo = FALSE}
+babies.reg = babies23[!babies23$gestation == '999',]
+babies.reg = babies.reg[!babies.reg$age == '99',]
+babies.reg = babies.reg[!babies.reg$dage == '99',]
+babies.reg = babies.reg[!babies.reg$parity == '99',]
+babies.reg = babies.reg[!babies.reg$race == '99',]
+babies.reg = babies.reg[!babies.reg$ed == '9',]
+babies.reg = babies.reg[!babies.reg$ht == '99',]
+babies.reg = babies.reg[!babies.reg$wt.1 == '999',]
+babies.reg = babies.reg[!babies.reg$drace == '99',]
+babies.reg = babies.reg[!babies.reg$ded == '9',]
+babies.reg = babies.reg[!babies.reg$dht == '99',]
+babies.reg = babies.reg[!babies.reg$dwt == '999',]
+babies.reg = babies.reg[!babies.reg$inc == '98',]
+babies.reg = babies.reg[!babies.reg$inc == '99',]
+babies.reg = babies.reg[!babies.reg$time == '99',]
+babies.reg = babies.reg[!babies.reg$time == '98',]
+babies.reg = babies.reg[!babies.reg$number == '98',]
+babies.reg = babies.reg[!babies.reg$drace == '99',]
+babies.reg = babies.reg[,-1]
+babies.reg = babies.reg[,-1]
+babies.reg = babies.reg[,-1]
+babies.reg = babies.reg[,-3]
+babies.reg = babies.reg[,-1]
+model = lm(wt~., data = babies.reg)
+summary(model)
+```
+
+#Draw the scatter plot for the regression results
+```{r plot, echo = FALSE}
+par(mfrow=c(2,2))
+plot(x = babies.reg$gestation, y = babies.reg$wt, xlab = "gestation", ylab = "babies.weight")
+abline(lm(wt~gestation, data = babies.reg), col = 'red')
+plot(x = babies.reg$ht, y = babies.reg$wt, xlab = "babies.height", ylab = "babies.weight")
+abline(lm(wt~ht, data = babies.reg),col = 'red')
+plot(x = babies.reg$dwt, y = babies.reg$wt, xlab = "dad.weight", ylab = "babies.weight")
+abline(lm(wt~dwt, data = babies.reg),col = 'red')
+plot(x = babies.reg$number, y = babies.reg$wt, xlab = "number", ylab = "babies.weight")
+abline(lm(wt~number, data = babies.reg),col = 'red')
+```
+
+
+## Q4
+#Additional question: how will the gestation influence babies' weight
+#We also put gestation into three categories: pre-term, term, post-term. We define the pre-term to be 37 weeks (259 days), term to be time between 37 weeks and 42 weeks (59–293 days), and post-term to be time greater than 42 weeks (>293). 
+
+#Plot the box plot for different gestation length of smokers
+```{r plot}
+smoker <- smoker[!smoker$gestation == '999',]
+nonsmoke <- nonsmoke[!nonsmoke$gestation == '999',]
+preterm_smoke <- smoker[which(smoker$gestation <= 259)]
+term_smoke <- smoker[which(smoker$gestation > 259 & 294 > smoker$gestation)]
+postterm_smoke <- smoker[which(smoker$gestation >= 294)]
+preterm_nonsmoke <- nonsmoke[which(nonsmoke$gestation <= 259)]
+term_nonsmoke <- nonsmoke[which(294 > nonsmoke$gestation & nonsmoke$gestation > 259)]
+postterm_nonsmoke <- nonsmoke[which(nonsmoke$gestation >= 294)]
+boxplot(preterm_smoke[["wt"]],term_smoke[["wt"]],postterm_smoke[["wt"]],
+        main = 'Multiple boxes of baby weight for smoker',
+        names = c("preterm","term", "postterm"),
+        las = 2,
+        xlab = 'Birth weight in ounces',
+        col = c('red','blue','green'),
+        border = 'black',
+        horizontal = TRUE)
+```
+
+#Plot the box plot for different gestation length of non-smokers
+```{r plot}
+boxplot(preterm_nonsmoke[["wt"]],term_nonsmoke[["wt"]],postterm_nonsmoke[["wt"]],
+        main = 'Multiple boxes of baby weight for nonsmoker',
+        names = c("preterm","term","postterm"),
+        las = 2,
+        xlab = 'Birth weight in ounces',
+        col = c('red','blue','green'),
+        border = 'black',
+        horizontal = TRUE)
+
+nonsmoke = babies23[babies23$smoke == '0',]
+smoker = babies23[babies23$smoke != '0', ]
+```
+
+#plot box plot for gestation with different smoking status 
+```{r plot}
+babies23 <- babies23[!babies23$gestation == '999',]
+nonsmoke = babies23[babies23$smoke == '0',]
+smoker1 = babies23[babies23$smoke == '1', ]
+smokerUntilPreg = babies23[babies23$smoke == '2', ]
+smokerOnce = babies23[babies23$smoke == '3', ]
+smokerAll = babies23[babies23$smoke != '0', ]
+
+boxplot(nonsmoke[["gestation"]], smoker1[["gestation"]], smokerUntilPreg[["gestation"]], smokerOnce[["gestation"]],main = "gestation by smoking level", ylab = "gestation in days", range = 0, names = c("Not smoke","Smoke", "UtilPreg", "Once"), boxwex = 0.75, varwidth = TRUE, outline = FALSE, col = c("red", "blue", "yellow", "green"))
+
+boxplot(nonsmoke[["gestation"]], smoker1[["gestation"]], smokerUntilPreg[["gestation"]], smokerOnce[["gestation"]],main = "gestation by smoking level", ylab = "gestation in days", range = 0, names = c("Not smoke","Smoke", "UtilPreg", "Once"), boxwex = 0.5, varwidth = TRUE, outline = FALSE, ylim = c(250,300),col = c("red", "blue", "yellow", "green"))
+```

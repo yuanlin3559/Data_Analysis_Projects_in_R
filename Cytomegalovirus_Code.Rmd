@@ -1,0 +1,291 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+suppressPackageStartupMessages(library(data.table))
+rm(list=ls())
+library(dplyr)
+#install.packages("devtools")
+library(devtools)
+#install_github("easyGgplot2", "kassambara")
+#install_github("kassambara/easyGgplot2")
+library(easyGgplot2)
+```
+
+```{r , echo = FALSE}
+setwd('C:/Users/pro/Desktop')
+hcmv = fread("hcmv.txt")
+hcmv <- hcmv[!hcmv$location == 'NA',]
+```
+
+Q1
+```{r}
+N <- 229354
+n <- 296
+set.seed(296)
+gene <- seq(1, N)
+site.random <- sample.int(N, size=n)
+library(lattice)
+stripplot(site.random, pch=16, cex=0.25)
+
+hcmv <- fread("hcmv.txt")
+hcmv <- hcmv[-297,]
+hist(site.random,  col = rgb(1,0,0,0.5), xlab = "site", main = "Histogram of Simulated Data and Observed Data",probability = TRUE,ylim=c(0,8e-06))
+lines(density(site.random,adjust=2), col = rgb(1,0,0,0.5))
+hist(hcmv$location,  col = rgb(0,0,1,0.5),  add = TRUE,probability = TRUE)
+lines(density(hcmv$location,adjust=2), col = rgb(0,0,1,0.5))
+legend(x = 175000, y = 8e-06, legend = c("simulated", "observed"), lty = c(1,1), col = c(rgb(1,0,0,0.5), rgb(0,0,1,0.5)))
+```
+
+Q2
+```{r}
+#Question 2 
+n <- 296
+#create a new dataframe for consecutive palindromes
+x1 <- hcmv[1:295,c(1)]
+x2 <- hcmv[2:296,c(1)]
+consecutive <- (x2 - x1)
+con_df <- data.frame(x1,x2,consecutive)
+names(con_df) <- c("x1","x2","consecutive")
+first_obs <- data.frame(0,177,0)
+names(first_obs) <- c("x1","x2","consecutive")
+con_new <- rbind(first_obs,con_df) 
+#make a scatter plot
+sca_x <- con_new$x2
+sca_y <- con_new$consecutive
+plot(sca_x,sca_y, main = "Spaces between Consecutive Palindromes",
+    xlab = "296 Palindromes",ylab = "Numbers of spaces(as DNA base pairs)",
+    pch = 18, frame = TRUE)
+abline(lm(sca_y~sca_x,data = con_new),col = "blue")
+
+# make a histogram of consecutive palindromes spacing
+
+# create a new dataframe for consecutive pairs
+x2_1 <- hcmv[1:294,c(1)]
+x2_2 <- hcmv[3:296,c(1)]
+consecutive2 <- (x2_2 - x2_1)
+con2_df <- data.frame(x2_1,x2_2,consecutive2)
+
+names(con2_df) <- c("x2_1","x2_2","consecutive2")
+
+
+plot(con2_df$x2_2,con2_df$consecutive2, main = "Spaces between Consecutive Palindrome Pairs",
+     xlab = "296 Palindromes",ylab = "Numbers of spaces(as DNA base pairs)",
+     pch = 18, frame = TRUE,col = "grey")
+abline(lm(sca_y~sca_x,data = con_new),col = "blue")
+
+# create a new dataframe for consecutive triplets
+x3_1 <- hcmv[1:293,c(1)]
+x3_2 <- hcmv[4:296,c(1)]
+consecutive3 <- (x3_2 - x3_1)
+con3_df <- data.frame(x3_1,x3_2,consecutive3)
+
+names(con3_df) <- c("x3_1","x3_2","consecutive3")
+
+plot(con3_df$x3_2,con3_df$consecutive3, main = "Spaces between Consecutive Palindrome Triplets",
+     xlab = "296 Palindromes",ylab = "Numbers of spaces(as DNA base pairs)",
+     pch = 18, frame = TRUE,col = "Pink")
+abline(lm(sca_y~sca_x,data = con_new),col = "blue")
+
+#Histogram of 3 different type of spaces
+single <- rep("single spacing", 295)
+pair <- rep("pair spacing",294)
+triplet <- rep("triplet spacing",293)
+compare1 <- data.frame(single,consecutive)
+compare2 <- data.frame(pair,consecutive2)
+compare3 <- data.frame(triplet,consecutive3)
+names(compare1) <- c("type","space")
+names(compare2) <- c("type","space")
+names(compare3) <- c("type","space")
+compare <- rbind(compare1,compare2,compare3)
+ggplot2.histogram(data=compare, xName="space",
+                  groupName="type", legendPosition="right",
+                  alpha=0.4, addDensity=TRUE,
+                  addMeanLine=TRUE, meanLineColor="white", meanLineSize=1)
+
+ggplot2.histogram(data=compare, xName="space",
+                  groupName="type", legendPosition="right",
+                  alpha=0.4, addDensity=FALSE,
+                  addMeanLine=FALSE, meanLineColor="white", meanLineSize=1)
+
+```
+
+Q3
+```{r}
+#Find the right interval length
+r = 2*296^(2/5)
+r
+#Choose smaller ones
+#Observe that if we take r = 23, can still achieve n*p >= 5
+observedTable = table(cut(hcmv$location,breaks = c(10000*0:23)))#all elements greater than 5.
+observed = as.vector(observedTable)
+
+#Compare graphically using histogram
+par(mfrow=c(1,2))
+hist(hcmv$location, breaks = c(10000*0:23), freq = TRUE, labels = TRUE, col = "lightblue", main = "Frequency of locations 1", xlab = "Observed locations", ylim = c(0, 25), xlim = c(0, 250000))
+hist(site.random, breaks = c(10000*0:23), main = "Frequency of locations 2", freq = TRUE, labels = TRUE, col = "lightpink", ylim = c(0,25), xlim = c(0, 250000), xlab = "random locations")
+#Observation: mean = 296/23 = 12.8696. 60000-80000 much higher, 80000-90000 much lower, 90000-100000 much higher, 190000-200000 much higher, 200000-220000 much lower, 220000-230000 much higher. Both have two extreme high intervals. Compare with uniform: more extremes
+```
+
+Q3 Part 2
+```{r}
+#Compare with poisson distribution graphically
+#generate a poisson distribution
+poissonGenerated = rpois(296, lambda = mean(observed))
+#compare graphically
+hist(poissonGenerated, breaks = 23, probability = TRUE, col = rgb(1,0,0,0.4), main = "Number of counts", ylim = c(0,0.25), xlim = c(3,25), xlab = "Counts")
+lines(density(poissonGenerated, adjust = 2), col = "darkgreen", lty = 2)
+hist(observed, breaks = 23, col = rgb(0,0,1,0.4), probability = TRUE, add = TRUE)
+lines(density(observed, adjust = 2), col = "darkblue")
+legend(x = 20, y = 0.25, legend = c("poisson", "observed"), lty = c(2, 1), col = c("darkgreen", "darkblue"))
+
+#Compare with generated distribution rigorously using chi-squared test
+#With randomly generated sample
+generatedTable = table(cut(site.random,breaks = c(10000*0:23)))
+generated = as.vector(generatedTable)
+p.generated = generated/296
+chisq.test(observed, p = p.generated)#Rej
+#With poisson distributed sample
+poissonedTable = table(cut(poissonGenerated, breaks = 23))
+poiss = as.vector(poissonedTable)
+chisq.test(observed, poiss)#Fail
+
+#Sensitivity for overall shape
+#Compare with randomly generated sample
+#Decrease interval
+observed.decTable = table(cut(hcmv$location,breaks = c(9557*0:24)))#all elements greater than 5.
+generated.decTable = table(cut(site.random,breaks = c(9557*0:24)))
+observed.dec = as.vector(observed.decTable)
+generated.dec = as.vector(generated.decTable)
+p.generated.dec = generated.dec/296
+chisq.test(observed.dec, p = p.generated.dec)#Rej
+
+#Increase interval
+observed.incTable = table(cut(hcmv$location,breaks = c(10426*0:22)))#all elements greater than 5.
+generated.incTable = table(cut(site.random,breaks = c(10426*0:22)))
+observed.inc = as.vector(observed.incTable)
+generated.inc = as.vector(generated.incTable)
+p.generated.inc = generated.inc/296
+chisq.test(observed.inc, p = p.generated.inc)#Rej
+
+#Compare with poison generated sample
+#Decrease interval
+poissonedTable.dec = table(cut(poissonGenerated, breaks = 24))
+poiss.dec = as.vector(poissonedTable.dec)
+chisq.test(observed.dec,poiss.dec)#Fail
+
+#Increase interval
+poissonedTable.inc = table(cut(poissonGenerated, breaks = 22))
+poiss.inc = as.vector(poissonedTable.inc)
+chisq.test(observed.inc,poiss.inc)#Fail
+
+#Classify regions
+#Classify according to their differences
+observed1Table = table(cut(hcmv$location,breaks = c(2000*1:116)))
+generated1Table = table(cut(site.random,breaks = c(2000*1:116)))
+observed1 = as.vector(observed1Table)
+generated1 = as.vector(generated1Table)
+diff = abs(observed1 - generated1)
+hist(diff, main = "Diffrences between observed and randomly generated values", xlab = "Differences", col = "darkblue", ylim = c(0,60), xlim = c(0, 11), labels = TRUE)
+classifying.value1 = mean(diff) + 2*sqrt(var(diff))
+classifying.value2 = mean(diff) + 1*sqrt(var(diff))
+classifying.value1#5.238282
+classifying.value2#3.575663
+```
+
+Q4
+```{r}
+#Compare rigorously using proportional test(use smaller interval)
+hist(hcmv$location, breaks = c(2000*0:116), freq = TRUE, labels = TRUE, col = "lightblue", main = "Frequency of locations with interval length 2000", xlab = "locations")
+hist(site.random, breaks = c(2000*0:116), freq = TRUE, labels = TRUE, col = "lightpink", main = "Random scattered frequency of locations with interval length 2000", xlab = "locations")
+#cannot perform chi-squared test since some bins have less than 5 elements. Use proportional test to examine exceptional bins
+#92000-94000(2000)
+prop.test(c(12,1), c(296,296), alternative = c("greater"))#Rej
+#194000-196000(2000)
+prop.test(c(8,4), c(296,296), alternative = c("greater"))#Fail
+#Sensitivity for exceptional bins
+#Increase interval
+observed1.inc = table(cut(hcmv$location,breaks = c(2100*1:110)))
+generated1.inc = table(cut(site.random,breaks = c(2100*1:110)))
+#13,2(93000),9,3(195000)
+prop.test(c(13,2), c(296,296), alternative = c("greater"))#Rej
+prop.test(c(9,3), c(296,296), alternative = c("greater"))#Fail
+#Decrease interval
+observed1.dec = table(cut(hcmv$location,breaks = c(1900*1:121)))
+generated1.dec = table(cut(site.random,breaks = c(1900*1:121)))
+#11,2(93000),8, 3(195000)
+prop.test(c(11,2), c(296,296), alternative = c("greater"))#Rej
+prop.test(c(8,3), c(296,296), alternative = c("greater"))#Fail
+
+#use simulation test to check if the cluster would appear in random generations
+N <- 229354
+n <- 296
+simulated = 0
+times = 0:999
+simulated.max <- c()
+for (i in times){
+  random <- sample.int(N, size=n)
+  random.generated <- table(cut(random,breaks = c(2000*1:112)))
+  observed <- table(cut(hcmv$location,breaks = c(2000*1:112)))
+  #check if the big cluster would exist in random generations
+  if (max(observed) <= max(random.generated)){
+    simulated <- simulated + 1
+  }
+  simulated.max <- c(simulated.max, max(random.generated))
+}
+#the chance that clusters appear in random generations
+p.value.2000 = simulated/1000
+#graph the maximum counts in 1000 simulated DNA
+hist(simulated.max, 
+     main = "Max Counts with Cut Size 2000",
+     xlab="Max Counts",
+     col="#009999")
+
+#we should also check for other ways of cutting the DNA, we take half the size for each piece
+for (i in times){
+  random <- sample.int(N, size=n)
+  random.generated <- table(cut(random,breaks = c(1000*1:230)))
+  observed <- table(cut(hcmv$location,breaks = c(1000*1:230)))
+  #check if the big cluster would exist in random generations
+  if (max(observed) <= max(random.generated)){
+    simulated <- simulated + 1
+  }
+  simulated.max <- c(simulated.max, max(random.generated))
+}
+#the chance that clusters appear in random generations
+p.value.1000 = simulated/1000
+#graph the maximum counts in 1000 simulated DNA
+hist(simulated.max, 
+     main = "Max Counts with Cut Size 1000",
+     xlab="Max Counts",
+     col="#996633")
+
+#we should also check for other ways of cutting the DNA, we half the size for each piece again
+for (i in times){
+  random <- sample.int(N, size=n)
+  random.generated <- table(cut(random,breaks = c(500*1:460)))
+  observed <- table(cut(hcmv$location,breaks = c(500*1:460)))
+  #check if the big cluster would exist in random generations
+  if (max(observed) <= max(random.generated)){
+    simulated <- simulated + 1
+  }
+  simulated.max <- c(simulated.max, max(random.generated))
+}
+#the chance that clusters appear in random generations
+p.value.500 = simulated/1000
+#graph the maximum counts in 1000 simulated DNA
+hist(simulated.max, 
+     main = "Max Counts with Cut Size 500",
+     xlab="Max Counts",
+     col="darkmagenta")
+```
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+?hist

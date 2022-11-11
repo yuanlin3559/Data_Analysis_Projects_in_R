@@ -1,0 +1,452 @@
+---
+title: "Math189_Project2_final_code"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+suppressPackageStartupMessages(library(data.table))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(dplyr))
+library(e1071)
+
+# setwd('/mnt/genomics/Kysha/ImmunoCancer/Yibei/189')
+```
+
+#import data
+```{r video}
+video_dt <- fread("video.txt")
+videoMultiple = fread("videoMultiple.txt")
+colnames(videoMultiple)
+names(videoMultiple)[6] = "relax"
+names(videoMultiple)[7] = "coord"
+names(videoMultiple)[8] = "challenge"
+names(videoMultiple)[9] = "master"
+names(videoMultiple)[10] = "bored"
+names(videoMultiple)[11] = "other"
+names(videoMultiple)[12] = "graphic"
+names(videoMultiple)[13] = "time"
+names(videoMultiple)[14] = "frust"
+names(videoMultiple)[15] = "lonely"
+names(videoMultiple)[16] = "rules"
+names(videoMultiple)[17] = "cost"
+names(videoMultiple)[18] = "boring"
+names(videoMultiple)[19] = "friends"
+names(videoMultiple)[20] = "point"
+names(videoMultiple)[21] = "other2"
+
+```
+
+############Scenario 1
+```{r}
+#calculate population proportion of students who played video games in the week prior to the exam
+video_s1 <- video_dt
+time_col <- video_s1$time
+pop_size <- 3000
+sample_size <- nrow(video_s1)
+played_num <- nrow(video_s1[!video_s1$time == 0,])
+sample_prop <- played_num/sample_size
+standard_error <- qnorm(0.975) * sqrt(sample_prop*(1-sample_prop))/sqrt(sample_size-1)*(sqrt(pop_size-sample_size)/sqrt(pop_size))
+left <- sample_prop - standard_error
+right <- sample_prop + standard_error
+```
+
+
+############Scenario 2
+```{r plot}
+#clean up the outliers in freq
+video_s2 <- video_dt[video_dt$freq != 99]
+video_s2<-video_s2[video_s2$time != 30]
+
+```
+
+```{r plot}
+par(mfrow = c(1,2))
+hist(video_s2$freq, breaks=c(0,1,2,3,4),main = paste("Histogram of" , "frequency of played"),xlab="frequency of play")
+hist(video_s2$time, breaks=seq(0,14,l=15), main = paste("Histogram of" , "time"),xlab="time")
+```
+
+```{r plot}
+video_1 <- video_s2[video_s2$time ==0]
+video_2 <- video_s2[video_s2$time !=0]
+par(mfrow = c(1,3))
+hist(video_1$freq, breaks=c(0,1,2,3,4),main = "frequency of played for time zero",xlab="frequency of play")
+hist(video_2$freq, breaks=c(0,1,2,3,4),main = "frequency of played for non-zero time",xlab="frequency of play")
+hist(video_2$time,, breaks=seq(0,14,l=15), main = "time played for non-zero time",xlab="frequency of play")
+```
+
+```{r boxplot}
+video_1f <- video_s2[video_s2[["freq"]]==1]
+video_2f <- video_s2[video_s2[["freq"]]==2]
+video_3f <- video_s2[video_s2[["freq"]]==3]
+video_4f <- video_s2[video_s2[["freq"]]==4]
+video_1f$time <- video_1f$time/7
+video_3f$time <- video_3f$time*4
+video_4f$time <- video_4f$time*15
+boxplot(video_1f$time,video_2f$time,video_3f$time, video_4f$time,
+        main = "Time played for different people play with different frequency",
+        names = c("daily","weekly", "monthly","semesterly"),
+        las = 2,
+        xlab = 'time played',
+        col = c('red','blue','green','orange'),
+        border = 'black',
+        horizontal = TRUE)
+```
+
+############Scenario 3
+```{r}
+##plor histogram
+video_s3 <- video_dt
+# Add a Normal Curve to the histogram (sample distribution)
+x <- video_s3$time
+h<-hist(x, breaks=12, col="blue", xlab="# of hours played in the week",
+           main="Histogram with Normal Curve of Hours Played in the Week")
+xfit<-seq(min(x),max(x),length=40)
+yfit<-dnorm(xfit,mean=mean(x),sd=sd(x))
+yfit <- yfit*diff(h$mids[1:2])*length(x)
+lines(xfit, yfit, col="orange", lwd=2)
+```
+
+#perform one sample t test
+```{r}
+t.test(video_s3$time)
+
+#One Sample t-test
+
+#data:  video_s3$time
+#t = 3.139, df = 90, p-value = 0.002293
+#alternative hypothesis: true mean is not equal to 0
+#95 percent confidence interval:
+#  0.4562505 2.0294638
+#sample estimates:
+#  mean of x 
+#1.242857
+
+kurtosis(video_s3$time)
+```
+
+
+
+
+#bootstrape
+```{r}
+bootobject = NULL
+for (i in 1:500) {
+  bootobject[i] = mean(sample(as.vector(video_s3$time),size = 55,replace =TRUE))
+}
+
+m = qplot(bootobject,geom = "histogram",xlab = "bootobject",main = "Bootstrap-average amount of time played/wk")
+m + geom_histogram(aes(fill = ..count..))
+kurtosis(bootobject)
+skewness(bootobject)
+a = qqnorm(bootobject, main = "QQplot of Bootstrapped samples")
+```
+
+```{r}
+require(e1071)
+#kurtosis
+kurtosis_=NULL
+for(i in 1:1000){
+  kurtosis_[i]=kurtosis(rnorm(500))
+}
+mean(kurtosis_) #-0.01900885-0.01900885
+m = qplot(kurtosis_,geom="histogram",main = "Simulated Distribution of Kurtosis")
+m + geom_histogram(aes(fill = ..count..))
+
+#Skewness
+skewness_=NULL
+for(i in 1:1000){
+  skewness_[i]=kurtosis(rnorm(500))
+}
+mean(skewness_) # one round :-0.02773595
+m = qplot(skewness_,geom="histogram",main = "Simulated Distribution of Skewness")
+m + geom_histogram(aes(fill = ..count..))
+
+# the final result for s3
+t.test(bootobject)$"conf.int"
+```
+
+#jackknife
+```{r}
+jackobject = NULL
+for (i in 1:500) {
+  jackobject[i] = mean(sample(as.vector(video_s3$time),size = 90,replace =TRUE))
+}
+
+m = qplot(jackobject,geom = "histogram",xlab = "jackknife object",main = "jackknife - average amount of time played/wk")
+m + geom_histogram(aes(fill = ..count..))
+
+kurtosis(jackobject)
+skewness(jackobject)
+```
+
+############Scenario 4
+```{r, include = FALSE}
+#Data cleaning、
+video_s4 <- video_dt
+video_s4 <- video_s4[!video_s4$like == '99',]
+video_s4.Played = video_s4[video_s4$like != '1' ,]
+videoMultiple <- videoMultiple[!videoMultiple$relax == "NA",]
+#Like or not(out of 89)
+veryLike = video_s4[video_s4$like == '2',]#23
+somewhatLike = video_s4[video_s4$like == '3',]#46
+notreallyLike = video_s4[video_s4$like == '4',]#13
+dontLike = video_s4[video_s4$like == '5',]#7
+#prop.test
+prop.test(69, 89,p = 0.5, alternative = c("greater"), conf.level = 0.99)
+#Reason for like(out of 87)
+relax = videoMultiple[videoMultiple$relax == '1' ,]#58
+coordination = videoMultiple[videoMultiple$coord == '1' ,]#4
+challenge = videoMultiple[videoMultiple$challenge == '1' ,]#21
+master = videoMultiple[videoMultiple$master == '1' ,]#25
+bored = videoMultiple[videoMultiple$bored == '1' ,]#24
+graphic = videoMultiple[videoMultiple$graphic == '1' ,]#23
+#prop.test
+prop.test(58, 87,p = 0.5, alternative = c("greater"), conf.level = 0.99)
+#Reason for dislike(out of 87)
+time = videoMultiple[videoMultiple$time == '1' ,]#42
+frustrating = videoMultiple[videoMultiple$frust == '1' ,]#23
+lonely = videoMultiple[videoMultiple$lonely == '1' ,]#4
+rules = videoMultiple[videoMultiple$rules == '1' ,]#17
+cost = videoMultiple[videoMultiple$cost == '1' ,]#35
+boring = videoMultiple[videoMultiple$boring == '1' ,]#14
+noFriend = videoMultiple[videoMultiple$friends == '1' ,]#2
+pointless = videoMultiple[videoMultiple$point == '1' ,]#29
+```
+
+############Scenario 5
+```{r, include = FALSE}
+video_s5 <- video_dt
+#data cleaning
+video_s5 <- video_s5[!video_s5$like == '99',]
+video_s5 <- video_s5[!video_s5$educ == '99',]
+video_s5.Played = video_s5[video_s5$like != '1' ,]
+#Table visualization
+sex.Freq = table(video_s5.Played$like, video_s5.Played$sex)
+sex.Freq
+#Combine rows
+X = as.table(rbind(c(26, 42), c(12, 8)))
+dimnames(X) = list(attitude = c("Like", "Dislike"), gender = c("f", "M"))
+X
+#prop.test
+prop.test(c(26,42), c(38,50))
+#Table visualization
+own.Freq = table(video_s5.Played$like, video_s5.Played$own)
+own.Freq
+#Combine rows
+X = as.table(rbind(c(21, 47), c(3, 17)))
+dimnames(X) = list(attitude = c("Like", "Dislike"), own = c("NO", "YES"))
+X
+#prop.test
+prop.test(c(21,47),c(24,64))
+#Table visualization
+educ.Freq = table(video_s5.Played$like, video_s5.Played$educ)
+educ.Freq
+#Combine rows
+X = as.table(rbind(c(30, 35), c(10, 2)))
+dimnames(X) = list(attitude = c("Like", "Dislike"), educ = c("NO", "YES"))
+X
+#prop.test
+prop.test(c(30,35),c(40,37))
+```
+
+############Scenario 6
+
+```{r data, include = FALSE}
+games6 <- video_dt
+gamesMultiple = fread("videoMultiple.txt")
+gamesMultiple
+colnames(gamesMultiple)
+names(gamesMultiple)[1] <- "action"
+names(gamesMultiple)[2] <- "adv"
+names(gamesMultiple)[3] <- "sim"
+names(gamesMultiple)[4] <- "sport"
+names(gamesMultiple)[5] <- "strategy"
+gamesMultiple
+
+library(dplyr)
+grade = select(games6, grade)
+type = select(gamesMultiple, c('action', 'adv','sim','sport','strategy'))
+gamesNew = mutate(type, grade)
+
+games.type = na.omit(gamesNew)
+games.type = games.type[!games.type$action == '99',]
+games.type = games.type[!games.type$adv == '99',]
+games.type = games.type[!games.type$sim == '99',]
+games.type = games.type[!games.type$sport == '99',]
+games.type = games.type[!games.type$strategy == '99',]
+games.type = games.type[!games.type$grade == '99',]
+```
+
+connecting grade expectation with video games preference (whether the students like playing game or not)
+
+```{r like, echo = FALSE}
+games.like = na.omit(games6)
+games.like = games.like[!games.like$like == '99',]
+never = games.like[games.like$like == '1',]
+very = games.like[games.like$like == '2',]
+somewhat = games.like[games.like$like == '3',]
+notreally = games.like[games.like$like == '4',]
+no = games.like[games.like$like == '5',]
+
+
+library(moments)
+
+mean(never$grade)
+sd(never$grade)
+skewness(never$grade)
+kurtosis(never$grade)
+
+mean(very$grade)
+sd(very$grade)
+skewness(very$grade)
+kurtosis(very$grade)
+
+mean(somewhat$grade)
+sd(somewhat$grade)
+skewness(somewhat$grade)
+kurtosis(somewhat$grade)
+
+mean(notreally$grade)
+sd(notreally$grade)
+skewness(notreally$grade)
+kurtosis(notreally$grade)
+
+mean(no$grade)
+sd(no$grade)
+skewness(no$grade)
+kurtosis(no$grade)
+
+par(mfrow = c(2,3))
+hist(never$grade, breaks = c(-0.5,0.5, 1.5, 2.5, 3.5, 4.5), main = "never played students", xlab = "grade expectation", labels = c("F", "D", "C", "B", "A"), ylim = c(0,30))
+hist(very$grade, breaks = c(-0.5,0.5, 1.5, 2.5, 3.5, 4.5), main = "very much students", xlab = "grade expectation", labels = c("F", "D", "C", "B", "A"), ylim = c(0,30))
+hist(somewhat$grade, breaks = c(-0.5,0.5, 1.5, 2.5, 3.5, 4.5), main = "somewhat students", xlab = "grade expectation", labels = c("F", "D", "C", "B", "A"), ylim = c(0,30))
+hist(notreally$grade, breaks = c(-0.5,0.5, 1.5, 2.5, 3.5, 4.5), main = "not really students", xlab = "grade expectation", labels = c("F", "D", "C", "B", "A"), ylim = c(0,30))
+hist(no$grade, breaks = c(-0.5,0.5, 1.5, 2.5, 3.5, 4.5), main = "not at all students", xlab = "grade expectation", labels = c("F", "D", "C", "B", "A"), ylim = c(0,30))
+
+```
+
+connecting grade expectation with video games preference (types of games)
+
+```{r relation, echo = FALSE}
+action = games.type[games.type$action == '1',]
+adv = games.type[games.type$adv == '1',]
+sim = games.type[games.type$sim == '1',]
+sport = games.type[games.type$sport == '1',]
+strategy = games.type[games.type$strategy == '1',]
+
+library(moments)
+
+mean(action$grade)
+sd(action$grade)
+skewness(action$grade)
+kurtosis(action$grade)
+
+mean(adv$grade)
+sd(adv$grade)
+skewness(adv$grade)
+kurtosis(adv$grade)
+
+mean(sim$grade)
+sd(sim$grade)
+skewness(sim$grade)
+kurtosis(sim$grade)
+
+mean(sport$grade)
+sd(sport$grade)
+skewness(sport$grade)
+kurtosis(sport$grade)
+
+mean(strategy$grade)
+sd(strategy$grade)
+skewness(strategy$grade)
+kurtosis(strategy$grade)
+
+par(mfrow = c(2,3))
+hist(action$grade, breaks = c(-0.5, 0.5, 1.5, 2.5, 3.5, 4.5), main = "action players' grade expectations", xlab = "grade expectation", labels = c("F", "D", "C", "B", "A"), ylim = c(0,30))
+hist(adv$grade, breaks = c(-0.5, 0.5, 1.5, 2.5, 3.5, 4.5), main = "adventure players' grade expectations", xlab = "grade expectation", labels = c("F", "D", "C", "B", "A"), ylim = c(0,30))
+hist(sim$grade, breaks = c(-0.5, 0.5, 1.5, 2.5, 3.5, 4.5), main = "simulation players' grade expectations", xlab = "grade expectation", labels = c("F", "D", "C", "B", "A"), ylim = c(0,30))
+hist(sport$grade, breaks = c(-0.5, 0.5, 1.5, 2.5, 3.5, 4.5), main = "sport players' grade expectations", xlab = "grade expectation", labels = c("F", "D", "C", "B", "A"), ylim = c(0,30))
+hist(strategy$grade, breaks = c(-0.5, 0.5, 1.5, 2.5, 3.5, 4.5), main = "strategy players' grade expectations", xlab = "grade expectation", labels = c("F", "D", "C", "B", "A"), ylim = c(0,30))
+
+
+```
+grade expectation distribution v.s. target distribution
+
+```{r}
+A = sum(gamesNew$grade == "4")
+A
+A_proportion = A / 91
+A_proportion
+
+B = sum(gamesNew$grade == "3")
+B
+B_proportion = B / 91
+B_proportion
+
+C = sum(gamesNew$grade == "2")
+C
+C_proportion = C / 91
+C_proportion
+
+D = sum(gamesNew$grade == "1") + sum(gamesNew$grade == "0")
+D
+D_proportion = D / 91
+D_proportion
+
+A.test = prop.test(x = A, n = 91, p = 0.2, correct = FALSE, alternative = "greater")
+A.test
+
+B.test = prop.test(x = B, n = 91, p = 0.3, correct = FALSE, alternative = "greater")
+B.test
+
+C.test = prop.test(x = C, n = 91, p = 0.4, correct = FALSE, alternative = "less")
+C.test
+
+D.test = prop.test(x = C, n = 91, p = 0.1, correct = FALSE, alternative = "less")
+D.test
+```
+If the nonrespondents were failing students, we have
+
+```{r fail, echo = FALSE}
+A = sum(gamesNew$grade == "4")
+A
+A_proportion = A / 95
+A_proportion
+
+B = sum(gamesNew$grade == "3")
+B
+B_proportion = B / 95
+B_proportion
+
+C = sum(gamesNew$grade == "2")
+C
+C_proportion = C / 95
+C_proportion
+
+D = 4
+D
+D_proportion = D / 95
+D_proportion
+
+A.test = prop.test(x = A, n = 95, p = 0.2, correct = FALSE, alternative = "greater")
+A.test
+
+B.test = prop.test(x = B, n = 95, p = 0.3, correct = FALSE, alternative = "greater")
+B.test
+
+C.test = prop.test(x = C, n = 95, p = 0.4, correct = FALSE, alternative = "less")
+C.test
+
+D.test = prop.test(x = C, n = 95, p = 0.1, correct = FALSE, alternative = "less")
+D.test
+
+```
+
+
+##########additional question 
+```{r}
+lmod = lm(grade~., data=games6)
+summary(lmod)
+
+```

@@ -1,0 +1,399 @@
+---
+title: "Math189_project4"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+install.packages("lmerTest")
+suppressPackageStartupMessages(library(data.table))
+suppressPackageStartupMessages(library(ggplot2))
+library(dplyr)
+library(broom)
+library(lme4)
+library(lmerTest)
+library(colorspace)
+
+# dt <- fread("/mnt/genomics/Kysha/ImmunoCancer/Yibei/189/project_4/Dataset_HealthBehavAcadPerfAffect.tab.tsv")
+data_table <- fread("Dataset_HealthBehavAcadPerfAffect.tab.tsv")
+```
+
+```{r , echo = FALSE}
+# setwd('C:/Users/pro/Desktop')
+Affect <- data_table
+# Affect <- fread("Dataset_HealthBehavAcadPerfAffect.tab.tsv")
+Affect
+Affect <- Affect[!Affect$SQ == '-99',]
+Affect <- Affect[!Affect$PhysAct == '-99',]
+Affect <- Affect[!Affect$LGA == '-99',]
+Affect <- Affect[!Affect$PA == '-99',]
+Affect <- Affect[!Affect$V9 == '-99',]
+```
+
+Q1
+```{r}
+avgSQ = 1:82
+for (i in 1:82) {
+avgSQ[i] = mean(Affect$SQ[Affect$ID == i])  
+}
+avgPhys = 1:82
+for (i in 1:82) {
+avgPhys[i] = mean(Affect$PhysAct[Affect$ID == i])*0.0001
+}
+avgLGA = 1:82
+for (i in 1:82) {
+avgLGA[i] = mean(Affect$LGA[Affect$ID == i])
+}
+#Sleep quality vs. learning goal achievement
+plot(avgSQ,avgLGA,type = "p", col = "black", xlab = "average sleep quality", ylab = "average learning goal achivement", main = "Does sleep quality predict LGA")
+abline(lm(avgLGA~avgSQ), col = "red")
+SQonLGA = lm(avgLGA~avgSQ)
+summary(SQonLGA)
+
+#Physical activity vs. learning goal achievement
+plot(avgPhys,avgLGA,type = "p", col = "black", xlab = "average physical activity", ylab = "average learning goal achivement", main = "Does physical activity predict LGA")
+abline(lm(avgLGA~avgPhys), col = "red")
+PhysonLGA = lm(avgLGA~avgPhys)
+summary(PhysonLGA)
+```
+
+```{r}
+#Q2
+avgPA = 1:82
+for (i in 1:82) {
+avgPA[i] = mean(Affect$PA[Affect$ID == i])
+}
+avgNA = 1:82
+for (i in 1:82) {
+avgNA[i] = mean(Affect$V9[Affect$ID == i])
+}
+
+#Sleep quality vs. PA
+plot(avgSQ,avgPA,type = "p", col = "black", xlab = "sleep quality", ylab = "positive affect", main = "Linear regression of sleep quality on positive affect")
+abline(lm(avgPA~avgSQ), col = "red")
+SQonPA = lm(avgPA~avgSQ)
+summary(SQonPA)
+
+SQPAonLGA = lm(avgLGA~avgSQ+avgPA)
+summary(SQPAonLGA)
+
+#Sleep quality vs. NA
+plot(avgSQ,avgNA,type = "p", col = "black", xlab = "sleep quality", ylab = "negative affect", main = "Linear regression of sleep quality on negative affect")
+abline(lm(avgNA~avgSQ), col = "red")
+SQonNA = lm(avgNA~avgSQ)
+summary(SQonNA)
+
+SQNAonLGA = lm(avgLGA~avgSQ+avgNA)
+summary(SQNAonLGA)
+```
+
+```{r}
+#Q3
+avgPA = 1:82
+for (i in 1:82) {
+avgPA[i] = mean(Affect$PA[Affect$ID == i])
+}
+avgNA = 1:82
+for (i in 1:82) {
+avgNA[i] = mean(Affect$V9[Affect$ID == i])
+}
+
+#Physical Activity vs. PA
+plot(avgPhys,avgPA,type = "p", col = "black", xlab = "average physical activity", ylab = "average positive affect", main = "Linear regression of physical activity on positive affect")
+abline(lm(avgPA~avgPhys), col = "red")
+PhysonPA = lm(avgPA~avgPhys)
+summary(PhysonPA)
+
+PhysPAonLGA = lm(avgLGA~avgPhys+avgPA)
+summary(PhysPAonLGA)
+
+#Physical activity vs. NA
+plot(avgPhys,avgNA,type = "p", col = "black", xlab = "average physical activity", ylab = "average negative affect", main = "Linear regression of physical activity on negative affect")
+abline(lm(avgNA~avgPhys), col = "red")
+PhysonNA = lm(avgNA~avgPhys)
+summary(PhysonNA)
+
+PhysNAonLGA = lm(avgLGA~avgPhys+avgNA)
+summary(PhysNAonLGA)
+```
+
+
+Q4
+
+```{r}
+dt <- data_table
+dt$ID <- as.factor(dt$ID)
+dt <- dt[dt[["LGA"]]!=-99]
+```
+
+```{r cars}
+#Assume the model has correlated random effect
+mixed_model_IntSlope <- lmer(Exam ~ LGA + (LGA|ID), data = dt, REML = FALSE)
+summary(mixed_model_IntSlope)
+```
+
+```{r}
+ranef(mixed_model_IntSlope)[["ID"]]
+head(ranef(mixed_model_IntSlope)[["ID"]])
+```
+```{r}
+#No correlation between the slope and the intercept of the random effect
+mixed_model_IntSlope2 <- lmer(Exam ~ LGA + (LGA||ID), data = dt, REML = FALSE)
+summary(mixed_model_IntSlope2)
+
+
+```
+
+
+```{r}
+anova(mixed_model_IntSlope, mixed_model_IntSlope2)
+```
+
+```{r}
+library(gee)
+library(geepack)
+gee(formula=Exam ~ LGA, id=ID, data=dt, family=gaussian, corstr="independence")
+```
+
+
+#Q5
+
+## Within-person level 1
+
+```{r}
+data <-data_table
+data = data[!data$SQ == '-99',]
+data = data[!data$LGA == '-99',]
+```
+
+```{r}
+ggplot(data, aes(x = SQ, y = LGA)) +
+    geom_point() +
+    geom_smooth(method = "lm") +
+    facet_wrap(~ ID) +
+    xlab("Sleep Quality") + ylab("Learning Goals Achievement") +
+    theme_classic()
+```
+
+```{r}
+n = 82
+coeff = matrix(, nrow = n, ncol = 2)
+for(i in 1:12){
+    dat = data[data$ID == i,]
+    lmfit = lm(LGA ~ SQ, data = dat)
+    coeff[i,] = coef(lmfit)
+}
+for(i in 14:17){
+    dat = data[data$ID == i,]
+    lmfit = lm(LGA ~ SQ, data = dat)
+    coeff[i,] = coef(lmfit)
+}
+for(i in 19:28){
+    dat = data[data$ID == i,]
+    lmfit = lm(LGA ~ SQ, data = dat)
+    coeff[i,] = coef(lmfit)
+}
+for(i in 30:60){
+    dat = data[data$ID == i,]
+    lmfit = lm(LGA ~ SQ, data = dat)
+    coeff[i,] = coef(lmfit)
+}
+for(i in 62:63){
+    dat = data[data$ID == i,]
+    lmfit = lm(LGA ~ SQ, data = dat)
+    coeff[i,] = coef(lmfit)
+}
+for(i in 65:66){
+    dat = data[data$ID == i,]
+    lmfit = lm(LGA ~ SQ, data = dat)
+    coeff[i,] = coef(lmfit)
+}
+for(i in 69:73){
+    dat = data[data$ID == i,]
+    lmfit = lm(LGA ~ SQ, data = dat)
+    coeff[i,] = coef(lmfit)
+}
+for(i in 80:82){
+    dat = data[data$ID == i,]
+    lmfit = lm(LGA ~ SQ, data = dat)
+    coeff[i,] = coef(lmfit)
+}
+dat = data[data$ID == 75,]
+lmfit = lm(LGA ~ SQ, data = dat)
+coeff[75,] = coef(lmfit)
+dat = data[data$ID == 77,]
+lmfit = lm(LGA ~ SQ, data = dat)
+coeff[77,] = coef(lmfit)
+dat = data[data$ID == 79,]
+lmfit = lm(LGA ~ SQ, data = dat)
+coeff[79,] = coef(lmfit)
+coeff
+```
+
+
+```{r}
+plot(coeff[,2],xlab ="ID",ylab="coeff")
+abline(h = 0, v = 0, col = "gray60")
+```
+
+
+
+Q6
+
+```{r}
+
+df <- data_table
+# df = read.table("/Users/zsyzoez/Downloads/DATA.tsv", header = TRUE, sep = "\t")
+data <- df
+#data cleaning
+data<-data[data$LGA != -99, ]
+data<-data[data$PhysAct != -99, ]
+
+
+# within subject level , for each subject
+ggplot(data, aes(x = PhysAct, y = LGA)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  facet_wrap(~ Day) +
+  xlab("PhysAct") + ylab("LGA") +
+  theme_classic()
+
+#####
+n = 82
+coeff = matrix(, nrow = n, ncol = 2)
+for(i in 1:12){
+  dat = data[data$ID == i,]
+  lmfit = lm(LGA ~ PhysAct, data = dat)
+  coeff[i,] = coef(lmfit)
+}
+for(i in 14:17){
+  dat = data[data$ID == i,]
+  lmfit = lm(LGA ~ PhysAct, data = dat)
+  coeff[i,] = coef(lmfit)
+}
+for(i in 19:28){
+  dat = data[data$ID == i,]
+  lmfit = lm(LGA ~ PhysAct, data = dat)
+  coeff[i,] = coef(lmfit)
+}
+for(i in 30:60){
+  dat = data[data$ID == i,]
+  lmfit = lm(LGA ~ PhysAct, data = dat)
+  coeff[i,] = coef(lmfit)
+}
+for(i in 62:63){
+  dat = data[data$ID == i,]
+  lmfit = lm(LGA ~ PhysAct, data = dat)
+  coeff[i,] = coef(lmfit)
+}
+for(i in 65:66){
+  dat = data[data$ID == i,]
+  lmfit = lm(LGA ~ PhysAct, data = dat)
+  coeff[i,] = coef(lmfit)
+}
+for(i in 69:73){
+  dat = data[data$ID == i,]
+  lmfit = lm(LGA ~ PhysAct, data = dat)
+  coeff[i,] = coef(lmfit)
+}
+for(i in 80:82){
+  dat = data[data$ID == i,]
+  lmfit = lm(LGA ~ PhysAct, data = dat)
+  coeff[i,] = coef(lmfit)
+}
+dat = data[data$ID == 75,]
+lmfit = lm(LGA ~ PhysAct, data = dat)
+coeff[75,] = coef(lmfit)
+dat = data[data$ID == 77,]
+lmfit = lm(LGA ~ PhysAct, data = dat)
+coeff[77,] = coef(lmfit)
+dat = data[data$ID == 79,]
+lmfit = lm(LGA ~ PhysAct, data = dat)
+coeff[79,] = coef(lmfit)
+coeff
+
+coeff[,2]
+plot(coeff[,2],xlab ="ID",ylab="coeff")
+abline(h = 0, v = 0, col = "gray60")
+```
+
+
+#Q7
+```{r}
+library(plyr)
+library(ggplot2)
+library(broom)
+library(lme4)
+library(lmerTest)
+library(colorspace)
+Data <- data_table
+Data$ID <- as.factor(Data$ID)
+Data = Data[!Data$SQ == '-99',]
+Data = Data[!Data$LGA == '-99',]
+Data = Data[!Data$PA == '-99',]
+Data = Data[!Data$V9 == '-99',]
+
+ID_lst <- unique(Data$ID)
+ID_lst_int <- as.integer(levels(ID_lst))
+
+ggplot(data_table, aes(x = SQ, y = PA)) +
+  geom_point() +
+  geom_smooth(formula = y ~ x, method = "lm") +
+  facet_wrap(~ ID) +
+  xlab("SQ") + ylab("PA") +
+  theme_classic()
+
+#To get the estimates for the estimates of coefficients for each ID, we can use a for loop to fit a simple linear regression for each beach.
+coeff = matrix(, nrow = 82, ncol = 2)
+for(i in ID_lst_int){
+  dat = Data[Data$ID == i,]
+  lmfit = lm(PA ~ SQ, data = dat, na.action=na.exclude)
+  coeff[i,] = coef(lmfit)
+}
+SQ_PA <- coeff
+print(SQ_PA)
+mean_SQ_PA <- SQ_PA[,1]
+
+
+#now test the effect of PhysAct on PA
+ggplot(Data, aes(x = PhysAct, y = PA)) +
+  geom_point() +
+  geom_smooth(formula = y ~ x,method = "lm") +
+  facet_wrap(~ ID) +
+  xlab("PhysAct") + ylab("PA") +
+  theme_classic()
+
+#To get the estimates for the estimates of coefficients for each ID, we can use a for loop to fit a simple linear regression for each beach.
+coeff = matrix(, nrow = 82, ncol = 2)
+for(i in ID_lst_int){
+  dat = Data[Data$ID == i,]
+  lmfit = lm(PA ~ PhysAct, data = dat)
+  coeff[i,] = coef(lmfit)
+}
+PhysAct_PA <- coeff
+PhysAct_PA <- mean(PhysAct_PA[,1])
+
+
+
+#now we test the relation between PA and LGA
+ggplot(Data, aes(x = PA, y = LGA)) +
+  geom_point() +
+  geom_smooth(formula = y ~ x, method = "lm") +
+  facet_wrap(~ ID) +
+  xlab("PA") + ylab("LGA") +
+  theme_classic()
+
+#To get the estimates for the estimates of coefficients for each ID, we can use a for loop to fit a simple linear regression for each beach.
+coeff = matrix(, nrow = 82, ncol = 2)
+for(i in ID_lst_int){
+  dat = Data[Data$ID == i,]
+  lmfit = lm(LGA ~ PA, data = dat)
+  coeff[i,] = coef(lmfit)
+}
+PA_LGA <- coeff
+mean_PA_LGA <- mean(PA_LGA[,1])
+
+```
+
+
+
